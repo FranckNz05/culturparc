@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start.mjs",
     "lint": "eslint",
     "icons": "node scripts/prepare-logo.mjs && node scripts/generate-icons.mjs",
     "seed": "tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "start:next": "next start"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

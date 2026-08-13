@@ -10,6 +10,10 @@ databases:
     user: cultureparc
     plan: free
     postgresMajorVersion: "17"
+    # La region doit etre la meme que celle du service web : le reseau prive
+    # de Render ne relie que des ressources d'une meme region, et le nom
+    # d'hote interne dpg-... n'est pas resolvable au-dela.
+    region: frankfurt
 
 services:
   - type: web
@@ -31,11 +35,14 @@ services:
     # joignable que depuis le reseau prive de Render, auquel le build n'a pas
     # acces. Les y laisser produisait un P1001 "Can't reach database server".
     #
+    # npm start passe par scripts/start.mjs : il attend que la base reponde,
+    # applique les migrations, puis lance le serveur. Au premier deploiement,
+    # la base est encore en cours de creation quand le service demarre.
+    #
     # migrate deploy n'applique que des migrations deja ecrites, ne touche
     # jamais aux donnees existantes, et ne fait rien quand la base est deja a
-    # jour. Prisma pose un verrou le temps de l'operation, donc plusieurs
-    # instances qui demarrent ensemble ne se marchent pas dessus.
-    startCommand: npx prisma migrate deploy && npm start
+    # jour.
+    startCommand: npm start
 
     healthCheckPath: /api/sante
 

@@ -1,0 +1,730 @@
+// Culture Parc - schema de la billetterie cinema
+// Montants en entiers : le franc CFA (XAF) n'a pas de sous-unite.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Utilisateurs et acces
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER // client final
+  STAFF // controle d'acces, scan des billets
+  MANAGER // programmation et tarifs d'un cinema
+  ADMIN // acces complet
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String?   @unique
+  phone        String?   @unique // format international +242...
+  name         String
+  passwordHash String?
+  role         Role      @default(CUSTOMER)
+  emailVerified DateTime?
+  phoneVerified DateTime?
+  image        String?
+
+  // Le cinema de rattachement pour le personnel (null pour les clients et admins)
+  cinemaId String?
+  cinema   Cinema? @relation(fields: [cinemaId], references: [id], onDelete: SetNull)
+
+  loyaltyPoints Int @default(0)
+
+  bookings      Booking[]
+  subscriptions Subscription[]
+  loyaltyLedger LoyaltyTransaction[]
+  scansPerformed ScanLog[]            @relation("ScannedBy")
+  accounts      Account[]
+  sessions      Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cinemaId])
+  @@map("users")
+}
+
+// Tables Auth.js : permettent d'ajouter Google/Facebook plus tard sans migration lourde.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Cinemas, salles, plan de sieges
+// ---------------------------------------------------------------------------
+
+model Cinema {
+  id      String  @id @default(cuid())
+  name    String // "Culture Parc Mfoa"
+  slug    String  @unique // "brazzaville-mfoa"
+  city    String // "Brazzaville"
+  address String?
+  phone   String? // "06 110 92 01"
+  lat     Float?
+  lng     Float?
+  active  Boolean @default(true)
+  sortOrder Int   @default(0)
+
+  auditoriums Auditorium[]
+  seatCategories SeatCategory[]
+  showtimes   Showtime[]
+  priceRules  PriceRule[]
+  promoCodes  PromoCode[]
+  staff       User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cinemas")
+}
+
+enum ScreenType {
+  STANDARD
+  THREE_D
+  PREMIUM
+  OUTDOOR // projections en plein air
+}
+
+model Auditorium {
+  id       String     @id @default(cuid())
+  cinemaId String
+  cinema   Cinema     @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+  name     String // "Salle 1"
+  screenType ScreenType @default(STANDARD)
+
+  // Dimensions de la grille utilisee par l'editeur de plan.
+  gridRows Int @default(12)
+  gridCols Int @default(18)
+
+  active Boolean @default(true)
+
+  seats     Seat[]
+  showtimes Showtime[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cinemaId, name])
+  @@map("auditoriums")
+}
+
+model SeatCategory {
+  id       String  @id @default(cuid())
+  cinemaId String
+  cinema   Cinema  @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+  name     String // "Standard", "Balcon", "VIP"
+  code     String // "STANDARD", "BALCON", "VIP"
+  color    String  @default("#F7941E") // couleur dans l'editeur et le plan
+  // Supplement applique au tarif de base, en FCFA. Peut etre negatif.
+  priceModifier Int @default(0)
+  sortOrder Int    @default(0)
+
+  seats      Seat[]
+  priceRules PriceRule[]
+
+  @@unique([cinemaId, code])
+  @@map("seat_categories")
+}
+
+enum SeatKind {
+  SEAT // place vendable
+  WHEELCHAIR // emplacement PMR
+  AISLE // couloir, non vendable, sert a dessiner le plan
+  BLOCKED // place condamnee
+}
+
+model Seat {
+  id           String     @id @default(cuid())
+  auditoriumId String
+  auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
+
+  rowLabel String // "A", "B", ...
+  number   Int // numero de la place dans la rangee
+
+  // Position sur la grille de l'editeur (colonne, ligne), base 0.
+  x Int
+  y Int
+
+  kind       SeatKind @default(SEAT)
+  categoryId String?
+  category   SeatCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  active Boolean @default(true)
+
+  holds       SeatHold[]
+  tickets     Ticket[]
+  ticketLines BookingTicketLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un seul siege par case de la grille, et un seul libelle rangee+numero par salle.
+  @@unique([auditoriumId, x, y])
+  @@unique([auditoriumId, rowLabel, number])
+  @@index([auditoriumId])
+  @@map("seats")
+}
+
+// ---------------------------------------------------------------------------
+// Films
+// ---------------------------------------------------------------------------
+
+enum MovieStatus {
+  DRAFT
+  COMING_SOON
+  NOW_SHOWING
+  ARCHIVED
+}
+
+model Movie {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  originalTitle String?
+  synopsis    String?
+  durationMin Int
+  releaseDate DateTime?
+  posterUrl   String?
+  backdropUrl String?
+  trailerUrl  String?
+  director    String?
+  cast        String[]    @default([])
+  // Age minimum conseille : 0, 12, 16, 18. Les affiches Culture Parc affichent "-12".
+  minAge      Int         @default(0)
+  status      MovieStatus @default(DRAFT)
+  featured    Boolean     @default(false)
+
+  genres     Genre[]
+  showtimes  Showtime[]
+  priceRules PriceRule[]
+  promoCodes PromoCode[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("movies")
+}
+
+model Genre {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  slug   String  @unique
+  movies Movie[]
+
+  @@map("genres")
+}
+
+// ---------------------------------------------------------------------------
+// Seances
+// ---------------------------------------------------------------------------
+
+enum ShowtimeFormat {
+  TWO_D
+  THREE_D
+}
+
+enum ShowLanguage {
+  VF // version francaise
+  VOSTFR // version originale sous-titree francais
+  VO
+}
+
+enum ShowtimeStatus {
+  SCHEDULED
+  CANCELLED
+  SOLD_OUT
+  FINISHED
+}
+
+model Showtime {
+  id           String     @id @default(cuid())
+  movieId      String
+  movie        Movie      @relation(fields: [movieId], references: [id], onDelete: Restrict)
+  auditoriumId String
+  auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Restrict)
+  cinemaId     String // denormalise : evite une jointure sur toutes les pages programme
+  cinema       Cinema     @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+
+  startsAt DateTime
+  endsAt   DateTime
+
+  format   ShowtimeFormat @default(TWO_D)
+  language ShowLanguage   @default(VF)
+  status   ShowtimeStatus @default(SCHEDULED)
+
+  // Tarif plancher de la seance. Les PriceRule et les supplements de categorie
+  // s'appliquent par-dessus ; voir src/lib/pricing.ts.
+  basePrice Int
+
+  // Avant-premiere : declenche le tarif PREMIERE.
+  isPremiere Boolean @default(false)
+
+  seatHolds SeatHold[]
+  tickets   Ticket[]
+  bookings  Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Une salle ne peut pas accueillir deux seances au meme instant.
+  @@unique([auditoriumId, startsAt])
+  @@index([cinemaId, startsAt])
+  @@index([movieId, startsAt])
+  @@map("showtimes")
+}
+
+// ---------------------------------------------------------------------------
+// Tarification
+// ---------------------------------------------------------------------------
+
+model TicketType {
+  id          String  @id @default(cuid())
+  name        String // "Enfant (3 a 11 ans)"
+  code        String  @unique // "CHILD"
+  description String?
+  minAge      Int?
+  maxAge      Int?
+  // Le guichet doit demander un justificatif (carte etudiant par exemple).
+  requiresProof Boolean @default(false)
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+
+  priceRules  PriceRule[]
+  tickets     Ticket[]
+  ticketLines BookingTicketLine[]
+
+  @@map("ticket_types")
+}
+
+// Regle de prix. La regle applicable est la plus specifique (priority la plus
+// haute) parmi celles dont tous les criteres non nuls correspondent.
+model PriceRule {
+  id       String @id @default(cuid())
+  label    String
+  priority Int    @default(0)
+  active   Boolean @default(true)
+
+  // Criteres facultatifs : null signifie "s'applique a tout".
+  cinemaId       String?
+  cinema         Cinema?       @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+  movieId        String?
+  movie          Movie?        @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  seatCategoryId String?
+  seatCategory   SeatCategory? @relation(fields: [seatCategoryId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  // 0 = dimanche ... 6 = samedi. Vide = tous les jours.
+  daysOfWeek Int[] @default([])
+  // Plage horaire de debut de seance, en minutes depuis minuit (ex. 14h00 = 840).
+  startMinute Int?
+  endMinute   Int?
+
+  amount Int // prix final en FCFA
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, priority])
+  @@map("price_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Verrouillage temporaire des sieges pendant le tunnel de paiement
+// ---------------------------------------------------------------------------
+
+model SeatHold {
+  id         String   @id @default(cuid())
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id], onDelete: Cascade)
+  seatId     String
+  seat       Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  // Identifie le panier anonyme (cookie) ou la commande en cours.
+  holdKey   String
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Coeur de l'anti-double-reservation : une seule retenue vivante par siege et
+  // par seance. Le nettoyage des retenues expirees libere la contrainte.
+  @@unique([showtimeId, seatId])
+  @@index([expiresAt])
+  @@index([holdKey])
+  @@map("seat_holds")
+}
+
+// ---------------------------------------------------------------------------
+// Commandes et billets
+// ---------------------------------------------------------------------------
+
+enum BookingStatus {
+  PENDING // sieges retenus, paiement non confirme
+  PAID
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum BookingChannel {
+  ONLINE
+  COUNTER // vendu au guichet
+}
+
+model Booking {
+  id        String        @id @default(cuid())
+  reference String        @unique // "CP-7F3K9Q", affichee au client
+  status    BookingStatus @default(PENDING)
+  channel   BookingChannel @default(ONLINE)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Achat sans compte : on garde le contact pour envoyer le billet.
+  guestName  String?
+  guestPhone String?
+  guestEmail String?
+
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+
+  subtotal Int // somme des billets avant remise
+  discount Int @default(0)
+  total    Int
+
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  // Au-dela de cette date sans paiement, la commande et ses retenues tombent.
+  expiresAt DateTime
+  paidAt    DateTime?
+
+  tickets       Ticket[]
+  payments      Payment[]
+  seatHolds     SeatHold[]
+  loyaltyLedger LoyaltyTransaction[]
+  ticketLines   BookingTicketLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([userId])
+  @@map("bookings")
+}
+
+// Tarif retenu pour chaque place, fige avant le paiement.
+// Sans cette table, on ne saurait pas au moment d'emettre les billets si telle
+// place a ete vendue au tarif enfant ou etudiant, et le prix pourrait changer
+// entre le recapitulatif et la confirmation.
+model BookingTicketLine {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  seatId String
+  seat   Seat   @relation(fields: [seatId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  price Int
+
+  @@unique([bookingId, seatId])
+  @@map("booking_ticket_lines")
+}
+
+enum TicketStatus {
+  VALID
+  SCANNED
+  CANCELLED
+  REFUNDED
+}
+
+model Ticket {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  // Duplique depuis la commande pour porter la contrainte d'unicite du siege.
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+  seatId     String
+  seat       Seat     @relation(fields: [seatId], references: [id], onDelete: Restrict)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  price Int // prix effectivement paye pour cette place
+
+  // Charge utile chiffree encodee dans le QR, et son empreinte pour la recherche.
+  qrPayload String @unique
+  qrHash    String @unique
+
+  status    TicketStatus @default(VALID)
+  scannedAt DateTime?
+
+  scans ScanLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un siege ne peut etre vendu qu'une fois pour une seance donnee.
+  @@unique([showtimeId, seatId])
+  @@index([bookingId])
+  @@map("tickets")
+}
+
+// ---------------------------------------------------------------------------
+// Paiements
+// ---------------------------------------------------------------------------
+
+enum PaymentProvider {
+  AIRTEL_MONEY
+  MTN_MOMO
+  CASH
+  SUBSCRIPTION // regle par credit d'abonnement
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING // en attente de confirmation sur le telephone
+  AMBIGUOUS // Airtel : statut indetermine, polling en cours
+  SUCCESS
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+model Payment {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  provider PaymentProvider
+  status   PaymentStatus   @default(INITIATED)
+
+  amount   Int
+  currency String @default("XAF")
+
+  msisdn String? // numero payeur
+
+  // Reference envoyee a l'operateur : alphanumerique uniquement pour Airtel.
+  externalRef String  @unique
+  // Identifiant retourne par l'operateur (airtel_money_id, financialTransactionId).
+  providerTxId String?
+  // Code brut de l'operateur, ex. DP00800001001.
+  providerCode String?
+  message      String?
+
+  attempts    Int       @default(0)
+  lastCheckedAt DateTime?
+  paidAt      DateTime?
+
+  rawResponse Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([bookingId])
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Abonnements et fidelite
+// ---------------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id          String  @id @default(cuid())
+  name        String // "Pass Cine 5 seances"
+  slug        String  @unique
+  description String?
+  price       Int
+  durationDays Int // validite a partir de l'achat
+  credits     Int // nombre de seances incluses ; 0 = illimite
+  perks       String[] @default([])
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscription_plans")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId String
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  status           SubscriptionStatus @default(ACTIVE)
+  startsAt         DateTime           @default(now())
+  endsAt           DateTime
+  creditsRemaining Int
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+enum LoyaltyReason {
+  BOOKING_EARNED
+  BOOKING_REDEEMED
+  MANUAL_ADJUSTMENT
+  SIGNUP_BONUS
+  EXPIRED
+}
+
+model LoyaltyTransaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Positif quand le client gagne des points, negatif quand il les depense.
+  points Int
+  reason LoyaltyReason
+  note   String?
+
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("loyalty_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Codes promo
+// ---------------------------------------------------------------------------
+
+enum PromoType {
+  PERCENT
+  FIXED
+}
+
+model PromoCode {
+  id     String    @id @default(cuid())
+  code   String    @unique
+  type   PromoType
+  value  Int // pourcentage (1-100) ou montant en FCFA
+  active Boolean   @default(true)
+
+  maxUses     Int? // null = illimite
+  usedCount   Int  @default(0)
+  maxPerUser  Int? @default(1)
+  minAmount   Int  @default(0)
+
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  cinemaId String?
+  cinema   Cinema? @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+  movieId  String?
+  movie    Movie?  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("promo_codes")
+}
+
+// ---------------------------------------------------------------------------
+// Controle d'acces
+// ---------------------------------------------------------------------------
+
+enum ScanResult {
+  OK
+  ALREADY_SCANNED
+  INVALID_SIGNATURE
+  NOT_FOUND
+  WRONG_SHOWTIME // billet valable, mais pas pour cette seance
+  TOO_EARLY
+  CANCELLED
+}
+
+model ScanLog {
+  id       String  @id @default(cuid())
+  ticketId String?
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  result     ScanResult
+  rawPayload String? // ce qui a reellement ete scanne, utile en cas de fraude
+
+  scannedById String?
+  scannedBy   User?   @relation("ScannedBy", fields: [scannedById], references: [id], onDelete: SetNull)
+
+  device    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("scan_logs")
+}

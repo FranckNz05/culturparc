@@ -1,69 +1,188 @@
-import Image from "next/image";
+import Link from "next/link";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { MovieCard } from "@/components/movie-card";
+import { Poster } from "@/components/poster";
+import { AgeBadge, Badge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
+import {
+  getCinemas,
+  getComingSoonMovies,
+  getNowShowingMovies,
+  getUpcomingShowtimes,
+} from "@/lib/queries";
+import { formatDayShort, formatDuration, formatTime } from "@/lib/utils";
 
-export default function Home() {
+// La programmation bouge tous les jours : on ne fige pas la page trop longtemps.
+export const revalidate = 300;
+
+export default async function HomePage() {
+  const [movies, comingSoon, cinemas] = await Promise.all([
+    getNowShowingMovies(),
+    getComingSoonMovies(),
+    getCinemas(),
+  ]);
+
+  const featured = movies.find((m) => m.featured) ?? movies[0];
+
+  const todayShowtimes = featured
+    ? await getUpcomingShowtimes({ movieId: featured.id, limit: 6 })
+    : [];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <>
+      <SiteHeader />
+
+      <main className="flex-1">
+        {/* ---------------------------------------------------------------
+            Mise en avant : le film du moment et ses prochaines seances
+            --------------------------------------------------------------- */}
+        {featured && (
+          <section className="relative overflow-hidden border-b border-ink-800">
+            <div className="absolute inset-0 bg-gradient-to-br from-brand-900/25 via-ink-950 to-ink-950" />
+
+            <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:py-16 md:flex-row md:items-center">
+              <Poster
+                src={featured.posterUrl}
+                title={featured.title}
+                priority
+                sizes="(max-width: 768px) 60vw, 260px"
+                className="aspect-2/3 w-44 shrink-0 self-start shadow-2xl sm:w-56 md:w-64"
+              />
+
+              <div className="min-w-0 flex-1 space-y-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="brand">A l&apos;affiche</Badge>
+                  <AgeBadge minAge={featured.minAge} />
+                  <span className="text-sm text-ink-300">
+                    {formatDuration(featured.durationMin)}
+                  </span>
+                </div>
+
+                <h1 className="font-display text-4xl leading-none text-ink-50 sm:text-6xl">
+                  {featured.title}
+                </h1>
+
+                {featured.synopsis && (
+                  <p className="max-w-2xl text-sm leading-relaxed text-ink-200 sm:text-base">
+                    {featured.synopsis}
+                  </p>
+                )}
+
+                {todayShowtimes.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-widest text-ink-400">
+                      Prochaines seances
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {todayShowtimes.map((s) => (
+                        <Link
+                          key={s.id}
+                          href={`/seances/${s.id}`}
+                          className="rounded-lg border border-ink-600 bg-ink-800/70 px-3 py-2 text-sm transition-colors hover:border-brand-500 hover:text-brand-400"
+                        >
+                          <span className="block text-[10px] uppercase tracking-wide text-ink-400">
+                            {formatDayShort(s.startsAt)}
+                          </span>
+                          <span className="font-semibold">{formatTime(s.startsAt)}</span>
+                          <span className="ml-2 text-xs text-ink-300">
+                            {s.cinema.city}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 pt-1">
+                  <ButtonLink href={`/films/${featured.slug}`} size="lg">
+                    Reserver une place
+                  </ButtonLink>
+                  <ButtonLink href="/programme" variant="secondary" size="lg">
+                    Voir tout le programme
+                  </ButtonLink>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ---------------------------------------------------------------
+            Films a l'affiche
+            --------------------------------------------------------------- */}
+        <section className="mx-auto max-w-6xl px-4 py-12">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <h2 className="font-display text-2xl text-ink-50 sm:text-3xl">
+              A l&apos;affiche
+            </h2>
+            <Link
+              href="/films"
+              className="text-sm text-brand-400 hover:text-brand-300"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+              Tous les films
+            </Link>
+          </div>
+
+          {movies.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-ink-700 p-8 text-center text-sm text-ink-300">
+              Aucune seance programmee pour le moment.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
+              {movies.slice(0, 10).map((movie, i) => (
+                <MovieCard key={movie.id} movie={movie} priority={i < 5} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ---------------------------------------------------------------
+            Nos salles
+            --------------------------------------------------------------- */}
+        <section className="border-y border-ink-800 bg-ink-900/50">
+          <div className="mx-auto max-w-6xl px-4 py-12">
+            <h2 className="mb-6 font-display text-2xl text-ink-50 sm:text-3xl">
+              Nos salles
+            </h2>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              {cinemas.map((cinema) => (
+                <Link
+                  key={cinema.id}
+                  href={`/programme?cinema=${cinema.slug}`}
+                  className="group rounded-xl border border-ink-700 bg-ink-850 p-5 transition-colors hover:border-brand-500"
+                >
+                  <h3 className="font-semibold text-ink-50 group-hover:text-brand-400">
+                    {cinema.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-ink-300">{cinema.city}</p>
+                  {cinema.phone && (
+                    <p className="mt-3 text-sm text-ink-400">{cinema.phone}</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------
+            Prochainement
+            --------------------------------------------------------------- */}
+        {comingSoon.length > 0 && (
+          <section className="mx-auto max-w-6xl px-4 py-12">
+            <h2 className="mb-6 font-display text-2xl text-ink-50 sm:text-3xl">
+              Prochainement
+            </h2>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
+              {comingSoon.map((movie) => (
+                <MovieCard key={movie.id} movie={movie} />
+              ))}
+            </div>
+          </section>
+        )}
       </main>
-    </div>
+
+      <SiteFooter />
+    </>
   );
 }

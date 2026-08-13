@@ -1,26 +1,110 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Culture Parc - charte graphique
+   Orange de la marque sur noir profond : on reprend l'ambiance d'une salle,
+   l'orange sert d'accent unique pour l'action et les places selectionnees.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  /* Orange Culture Parc */
+  --color-brand-50: #fff6ea;
+  --color-brand-100: #ffe8cc;
+  --color-brand-200: #ffd199;
+  --color-brand-300: #ffb35c;
+  --color-brand-400: #fca02e;
+  --color-brand-500: #f7941e; /* couleur du logo */
+  --color-brand-600: #e07c0a;
+  --color-brand-700: #b85f08;
+  --color-brand-800: #8f4a0d;
+  --color-brand-900: #6b380c;
+
+  /* Noirs et gris de l'interface */
+  --color-ink-950: #08080b;
+  --color-ink-900: #0d0d12;
+  --color-ink-850: #121218;
+  --color-ink-800: #16161d;
+  --color-ink-700: #1f1f28;
+  --color-ink-600: #2b2b36;
+  --color-ink-500: #3d3d4a;
+  --color-ink-400: #5c5c6b;
+  --color-ink-300: #8a8a99;
+  --color-ink-200: #b8b8c4;
+  --color-ink-100: #e2e2e8;
+  --color-ink-50: #f5f5f7;
+
+  /* Etats du plan de salle */
+  --color-seat-free: #2b2b36;
+  --color-seat-selected: #f7941e;
+  --color-seat-taken: #47202a;
+  --color-seat-vip: #a855f7;
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --font-sans: var(--font-outfit), system-ui, sans-serif;
+  --font-display: var(--font-bebas), var(--font-outfit), sans-serif;
+
+  --radius-card: 1rem;
+
+  --shadow-glow: 0 0 0 1px rgb(247 148 30 / 0.35), 0 8px 32px -8px rgb(247 148 30 / 0.45);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: var(--color-ink-950);
+  --foreground: var(--color-ink-50);
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Titres en capitales condensees, comme les affiches Culture Parc. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+/* Degrade utilise derriere les affiches pour que le texte reste lisible. */
+.poster-fade {
+  mask-image: linear-gradient(to bottom, black 45%, transparent 100%);
+}
+
+/* Barre de defilement discrete sur les rails horizontaux. */
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+.scrollbar-slim::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background: var(--color-ink-600);
+  border-radius: 9999px;
+}
+
+/* L'ecran, en haut du plan de salle. */
+.screen-curve {
+  background: linear-gradient(
+    to bottom,
+    rgb(247 148 30 / 0.55),
+    rgb(247 148 30 / 0.05) 60%,
+    transparent
+  );
+  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cultureparc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cultureparc
+      POSTGRES_PASSWORD: cultureparc
+      POSTGRES_DB: cultureparc
+    ports:
+      - "5432:5432"
+    volumes:
+      - cultureparc-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cultureparc -d cultureparc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cultureparc-pgdata:

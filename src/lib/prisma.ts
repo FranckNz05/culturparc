@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
 // Prisma 7 passe obligatoirement par un driver adapter.
-function createClient() {
+function createClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
@@ -44,8 +44,30 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+function getClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createClient();
+  }
+  return globalForPrisma.prisma;
 }
+
+/**
+ * Client Prisma, cree au premier usage et non a l'import.
+ *
+ * Cette indirection n'est pas un raffinement : `next build` charge chaque route
+ * pour en collecter la configuration, ce qui executerait la creation du client
+ * et ferait echouer la construction si DATABASE_URL n'est pas encore connue.
+ * Construire l'application ne doit rien exiger d'une base de donnees ; seule
+ * son execution en a besoin.
+ */
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getClient();
+    // Le client est passe comme receveur, et non le proxy : les modeles de
+    // Prisma sont exposes par des accesseurs qui lisent leur propre etat
+    // interne, et les leur faire lire a travers le proxy les casse.
+    const value = Reflect.get(client, property, client);
+    // Les methodes doivent rester liees au client, pas au proxy.
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});

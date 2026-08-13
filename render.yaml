@@ -19,10 +19,16 @@ services:
     region: frankfurt # le plus proche de l'Afrique centrale chez Render
     branch: main
 
-    # Les migrations tournent au build, avant que le nouveau code ne serve du
-    # trafic. `migrate deploy` n'applique que des migrations deja ecrites et ne
-    # touche jamais aux donnees existantes.
-    buildCommand: npm ci && npx prisma migrate deploy && npm run build
+    # --include=dev est indispensable : Render fixe NODE_ENV=production, et
+    # `npm ci` omettrait alors prisma, typescript, tailwind et sharp, tous
+    # necessaires pour construire l'application.
+    #
+    # `prisma generate` doit preceder le build : le client est genere dans
+    # src/generated, qui n'est pas versionne.
+    #
+    # `migrate deploy` n'applique que des migrations deja ecrites et ne touche
+    # jamais aux donnees existantes.
+    buildCommand: npm ci --include=dev && npx prisma generate && npx prisma migrate deploy && npm run build
     startCommand: npm start
 
     healthCheckPath: /api/sante

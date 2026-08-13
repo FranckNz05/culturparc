@@ -84,9 +84,17 @@ Deux variables sont a saisir a la main dans le tableau de bord :
 - `TICKET_QR_SECRET` : la changer invalide tous les billets deja emis.
 - Les identifiants Airtel et MTN, quand ils sont disponibles.
 
-Les migrations tournent au build, avant que le nouveau code ne serve du trafic.
-La sonde `/api/sante` interroge reellement la base, pour qu'un service coupe de
-sa base soit redemarre plutot que de repondre a vide.
+Les migrations tournent **au demarrage**, pas au build. La base Render n'est
+joignable que depuis le reseau prive, auquel la phase de build n'a pas acces :
+`prisma migrate deploy` y echouerait sur un `P1001 Can't reach database server`.
+Elles s'appliquent donc au lancement du service, ne font rien quand la base est
+deja a jour, et Prisma pose un verrou pour que plusieurs instances demarrant
+ensemble ne se marchent pas dessus.
+
+Pour la meme raison, construire l'application n'exige aucune base : le client
+Prisma n'est cree qu'au premier usage. La sonde `/api/sante`, elle, interroge
+reellement la base, pour qu'un service coupe de sa base soit redemarre plutot
+que de repondre a vide.
 
 ## Organisation
 

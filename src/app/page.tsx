@@ -6,27 +6,34 @@ import { Poster } from "@/components/poster";
 import { AgeBadge, Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import {
-  getCinemas,
   getComingSoonMovies,
   getNowShowingMovies,
   getUpcomingShowtimes,
 } from "@/lib/queries";
 import { formatDayShort, formatDuration, formatTime } from "@/lib/utils";
+import { getActiveCity } from "@/lib/city";
+import { parseVideoUrl } from "@/lib/video";
+import { HeroBackdrop } from "@/components/hero-backdrop";
 
 // La programmation bouge tous les jours : on ne fige pas la page trop longtemps.
-export const revalidate = 300;
+// Le choix de ville vit dans un cookie : le rendu ne peut pas etre mis en cache.
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [movies, comingSoon, cinemas] = await Promise.all([
-    getNowShowingMovies(),
+  // Tout l'accueil parle de la ville choisie : films, seances et salles.
+  const { city } = await getActiveCity();
+  const cinemaIds = city?.cinemas.map((c) => c.id);
+
+  const [movies, comingSoon] = await Promise.all([
+    getNowShowingMovies(cinemaIds),
     getComingSoonMovies(),
-    getCinemas(),
   ]);
+  const cinemas = city?.cinemas ?? [];
 
   const featured = movies.find((m) => m.featured) ?? movies[0];
 
   const todayShowtimes = featured
-    ? await getUpcomingShowtimes({ movieId: featured.id, limit: 6 })
+    ? await getUpcomingShowtimes({ movieId: featured.id, cinemaIds, limit: 6 })
     : [];
 
   return (
@@ -39,7 +46,11 @@ export default async function HomePage() {
             --------------------------------------------------------------- */}
         {featured && (
           <section className="relative overflow-hidden border-b border-ink-800">
-            <div className="absolute inset-0 bg-gradient-to-br from-brand-900/25 via-ink-950 to-ink-950" />
+            <HeroBackdrop
+              backdropUrl={featured.backdropUrl}
+              source={parseVideoUrl(featured.trailerUrl)}
+              movieTitle={featured.title}
+            />
 
             <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:py-16 md:flex-row md:items-center">
               <Poster
@@ -142,7 +153,7 @@ export default async function HomePage() {
         <section className="border-y border-ink-800 bg-ink-900/50">
           <div className="mx-auto max-w-6xl px-4 py-12">
             <h2 className="mb-6 font-display text-2xl text-ink-50 sm:text-3xl">
-              Nos salles
+              {city ? `Nos salles a ${city.name}` : "Nos salles"}
             </h2>
 
             <div className="grid gap-4 sm:grid-cols-3">
@@ -155,7 +166,9 @@ export default async function HomePage() {
                   <h3 className="font-semibold text-ink-50 group-hover:text-brand-400">
                     {cinema.name}
                   </h3>
-                  <p className="mt-1 text-sm text-ink-300">{cinema.city}</p>
+                  {cinema.address && (
+                    <p className="mt-1 text-sm text-ink-300">{cinema.address}</p>
+                  )}
                   {cinema.phone && (
                     <p className="mt-3 text-sm text-ink-400">{cinema.phone}</p>
                   )}

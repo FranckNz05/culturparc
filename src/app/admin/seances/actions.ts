@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyShowtimeCancelled } from "@/lib/notifications";
 
 const schema = z.object({
   movieId: z.string().min(1, "Choisissez un film."),
@@ -133,6 +134,18 @@ export async function cancelShowtime(formData: FormData): Promise<void> {
 
   if (sold === 0) {
     await prisma.seatHold.deleteMany({ where: { showtimeId: id } });
+  }
+
+  // Prevenir les clients passe avant tout le reste : ils doivent apprendre
+  // l'annulation par nous, pas devant une porte fermee. L'echec d'envoi est
+  // journalise mais ne remet pas l'annulation en cause.
+  if (sold > 0) {
+    try {
+      const report = await notifyShowtimeCancelled(id);
+      console.info("Annulation notifiee", report);
+    } catch (error) {
+      console.error("Notification d'annulation impossible", error);
+    }
   }
 
   revalidatePath("/admin/seances");

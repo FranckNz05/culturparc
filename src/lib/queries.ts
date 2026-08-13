@@ -29,7 +29,7 @@ export async function getCinemas() {
  * Films avec au moins une seance a venir. Un film sans seance programmee n'a
  * rien a faire sur la page d'accueil, meme marque "a l'affiche".
  */
-export async function getNowShowingMovies(cinemaSlug?: string) {
+export async function getNowShowingMovies(cinemaIds?: string[]) {
   return prisma.movie.findMany({
     where: {
       status: "NOW_SHOWING",
@@ -37,7 +37,7 @@ export async function getNowShowingMovies(cinemaSlug?: string) {
         some: {
           startsAt: { gte: new Date() },
           status: "SCHEDULED",
-          ...(cinemaSlug ? { cinema: { slug: cinemaSlug } } : {}),
+          ...(cinemaIds?.length ? { cinemaId: { in: cinemaIds } } : {}),
         },
       },
     },
@@ -86,6 +86,7 @@ export interface ShowtimeWithContext {
 export async function getUpcomingShowtimes(options: {
   movieId?: string;
   cinemaId?: string;
+  cinemaIds?: string[];
   from?: Date;
   to?: Date;
   limit?: number;
@@ -99,6 +100,9 @@ export async function getUpcomingShowtimes(options: {
       },
       ...(options.movieId ? { movieId: options.movieId } : {}),
       ...(options.cinemaId ? { cinemaId: options.cinemaId } : {}),
+      ...(options.cinemaIds?.length && !options.cinemaId
+        ? { cinemaId: { in: options.cinemaIds } }
+        : {}),
     },
     include: {
       auditorium: {

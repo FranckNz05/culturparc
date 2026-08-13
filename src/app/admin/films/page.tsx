@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Poster } from "@/components/poster";
 import { formatDuration, slugify } from "@/lib/utils";
+import { MediaField } from "@/components/media-field";
+import { MediaUploadError, resolveMediaInput } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,37 @@ async function createMovie(formData: FormData) {
     slug = `${base}-${suffix++}`;
   }
 
+  let posterUrl: string | null;
+  let trailerUrl: string | null;
+  let previewVideoUrl: string | null;
+
+  try {
+    // Un fichier televerse l'emporte sur l'URL saisie.
+    [posterUrl, trailerUrl, previewVideoUrl] = await Promise.all([
+      resolveMediaInput({
+        file: formData.get("posterFile") as File | null,
+        url: String(formData.get("posterUrl") ?? ""),
+        kind: "IMAGE",
+      }),
+      resolveMediaInput({
+        file: formData.get("trailerFile") as File | null,
+        url: String(formData.get("trailerUrl") ?? ""),
+        kind: "VIDEO",
+      }),
+      resolveMediaInput({
+        file: formData.get("previewVideoFile") as File | null,
+        url: String(formData.get("previewVideoUrl") ?? ""),
+        kind: "VIDEO",
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof MediaUploadError) {
+      console.error("Televersement refuse", error.message);
+      return;
+    }
+    throw error;
+  }
+
   await prisma.movie.create({
     data: {
       title,
@@ -43,8 +76,9 @@ async function createMovie(formData: FormData) {
       durationMin: Math.round(durationMin),
       synopsis: String(formData.get("synopsis") ?? "").trim() || null,
       director: String(formData.get("director") ?? "").trim() || null,
-      posterUrl: String(formData.get("posterUrl") ?? "").trim() || null,
-      trailerUrl: String(formData.get("trailerUrl") ?? "").trim() || null,
+      posterUrl,
+      trailerUrl,
+      previewVideoUrl,
       minAge: Number(formData.get("minAge") ?? 0),
       status: String(formData.get("status") ?? "DRAFT") as "DRAFT",
     },
@@ -96,6 +130,7 @@ export default async function MoviesAdminPage() {
 
       <form
         action={createMovie}
+        encType="multipart/form-data"
         className="space-y-4 rounded-xl border border-ink-700 bg-ink-900 p-5"
       >
         <h2 className="font-display text-xl text-ink-50">Ajouter un film</h2>
@@ -142,15 +177,29 @@ export default async function MoviesAdminPage() {
             </select>
           </label>
 
-          <label className="space-y-1.5">
-            <span className="text-sm text-ink-100">Affiche (URL)</span>
-            <input name="posterUrl" type="url" className={inputClass} />
-          </label>
+          <MediaField
+            label="Affiche du film"
+            name="poster"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            urlPlaceholder="https://.../affiche.jpg"
+            hint="Fichier JPEG, PNG ou WebP, 5 Mo maximum"
+          />
 
-          <label className="space-y-1.5 lg:col-span-2">
-            <span className="text-sm text-ink-100">Bande-annonce (URL)</span>
-            <input name="trailerUrl" type="url" className={inputClass} />
-          </label>
+          <MediaField
+            label="Bande-annonce"
+            name="trailer"
+            accept="video/mp4,video/webm,video/quicktime"
+            urlPlaceholder="https://www.youtube.com/watch?v=..."
+            hint="Lien YouTube ou Vimeo, ou fichier video de 25 Mo maximum"
+          />
+
+          <MediaField
+            label="Extrait au survol"
+            name="previewVideo"
+            accept="video/mp4,video/webm"
+            urlPlaceholder="https://.../extrait.mp4"
+            hint="Video courte et muette, jouee sur l&apos;affiche au survol"
+          />
 
           <label className="space-y-1.5 sm:col-span-2 lg:col-span-3">
             <span className="text-sm text-ink-100">Synopsis</span>

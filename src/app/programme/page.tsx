@@ -5,7 +5,8 @@ import { SiteFooter } from "@/components/site-footer";
 import { Poster } from "@/components/poster";
 import { AgeBadge } from "@/components/ui/badge";
 import { ShowtimeList } from "@/components/showtime-list";
-import { getCinemas, getUpcomingShowtimes } from "@/lib/queries";
+import { getUpcomingShowtimes } from "@/lib/queries";
+import { getActiveCity } from "@/lib/city";
 import { cn, formatDuration } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,8 @@ export default async function ProgramPage({
   const { cinema: cinemaSlug } = await searchParams;
   const selectedSlug = typeof cinemaSlug === "string" ? cinemaSlug : undefined;
 
-  const cinemas = await getCinemas();
+  const { city } = await getActiveCity();
+  const cinemas = city?.cinemas ?? [];
   const selected = selectedSlug
     ? cinemas.find((c) => c.slug === selectedSlug)
     : undefined;
@@ -33,6 +35,7 @@ export default async function ProgramPage({
 
   const showtimes = await getUpcomingShowtimes({
     cinemaId: selected?.id,
+    cinemaIds: cinemas.map((c) => c.id),
     to,
   });
 
@@ -53,7 +56,7 @@ export default async function ProgramPage({
           Programme
         </h1>
         <p className="mt-2 text-sm text-ink-300">
-          Les seances des sept prochains jours.
+          {city ? `Les seances des sept prochains jours a ${city.name}.` : "Les seances des sept prochains jours."}
         </p>
 
         {/* Filtre par salle */}
@@ -67,7 +70,7 @@ export default async function ProgramPage({
                 : "border-ink-600 text-ink-200 hover:border-ink-500",
             )}
           >
-            Tous les cinemas
+            Toutes les salles
           </Link>
 
           {cinemas.map((cinema) => (

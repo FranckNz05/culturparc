@@ -9,6 +9,7 @@ export interface MovieCardData {
   durationMin: number;
   minAge: number;
   posterUrl: string | null;
+  previewVideoUrl?: string | null;
   genres: { name: string }[];
 }
 
@@ -29,6 +30,7 @@ export function MovieCard({
           src={movie.posterUrl}
           title={movie.title}
           priority={priority}
+          previewVideoUrl={movie.previewVideoUrl}
           className="aspect-2/3 w-full transition-transform duration-300 group-hover:scale-[1.02]"
         />
         <div className="absolute right-2 top-2">

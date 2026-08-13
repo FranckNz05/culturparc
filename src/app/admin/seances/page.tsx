@@ -83,14 +83,58 @@ export default async function ShowtimesAdminPage() {
           Aucune seance a venir.
         </p>
       ) : (
-        <div className="space-y-6">
-          {[...byDay.entries()].map(([day, daySessions]) => (
-            <section key={day}>
-              <h2 className="mb-2 font-display text-lg capitalize text-brand-400">
-                {formatDayLong(new Date(`${day}T12:00:00`))}
-              </h2>
+        <div className="space-y-3">
+          {[...byDay.entries()].map(([day, daySessions], index) => {
+            const sold = daySessions.reduce((sum, s) => sum + s._count.tickets, 0);
+            const capacity = daySessions.reduce(
+              (sum, s) => sum + s.auditorium._count.seats,
+              0,
+            );
+            const fillRate = capacity > 0 ? Math.round((sold / capacity) * 100) : 0;
+            const cancelled = daySessions.filter(
+              (s) => s.status === "CANCELLED",
+            ).length;
 
-              <div className="overflow-x-auto rounded-xl border border-ink-700">
+            return (
+            // Seule la journee en cours s'ouvre d'emblee : au-dela, la page
+            // deroulerait des centaines de lignes.
+            <details
+              key={day}
+              open={index === 0}
+              className="group overflow-hidden rounded-xl border border-ink-700 bg-ink-900"
+            >
+              <summary className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-ink-850">
+                <span className="font-display text-lg capitalize text-brand-400">
+                  {formatDayLong(new Date(`${day}T12:00:00`))}
+                </span>
+
+                <span className="text-sm text-ink-300">
+                  {daySessions.length} seance{daySessions.length > 1 ? "s" : ""}
+                </span>
+
+                {cancelled > 0 && (
+                  <Badge tone="danger">
+                    {cancelled} annulee{cancelled > 1 ? "s" : ""}
+                  </Badge>
+                )}
+
+                <span className="ml-auto flex items-center gap-2">
+                  <span className="h-1.5 w-24 overflow-hidden rounded-full bg-ink-700">
+                    <span
+                      className="block h-full rounded-full bg-brand-500"
+                      style={{ width: `${Math.min(100, fillRate)}%` }}
+                    />
+                  </span>
+                  <span className="whitespace-nowrap text-xs text-ink-300">
+                    {sold} / {capacity} places
+                  </span>
+                  <span className="text-ink-400 transition-transform group-open:rotate-90">
+                    &rsaquo;
+                  </span>
+                </span>
+              </summary>
+
+              <div className="overflow-x-auto border-t border-ink-700">
                 <table className="w-full min-w-3xl text-sm">
                   <thead className="bg-ink-850 text-left text-xs uppercase tracking-wider text-ink-400">
                     <tr>
@@ -149,8 +193,9 @@ export default async function ShowtimesAdminPage() {
                   </tbody>
                 </table>
               </div>
-            </section>
-          ))}
+            </details>
+            );
+          })}
         </div>
       )}
     </div>

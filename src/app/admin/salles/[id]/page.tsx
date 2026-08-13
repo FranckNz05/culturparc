@@ -63,6 +63,12 @@ export default async function AuditoriumPlanPage({
         initialSeats={seats}
         initialRows={auditorium.gridRows}
         initialCols={auditorium.gridCols}
+        initialNumbering={{
+          rowLabelStyle: auditorium.rowLabelStyle,
+          rowOrder: auditorium.rowOrder,
+          seatDirection: auditorium.seatDirection,
+          seatNumberStart: auditorium.seatNumberStart,
+        }}
         categories={auditorium.cinema.seatCategories.map((c) => ({
           id: c.id,
           name: c.name,

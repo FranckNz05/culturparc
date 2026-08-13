@@ -4,6 +4,15 @@ import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  previewRow,
+  renumberSeats,
+  rowLabelFor,
+  type NumberingSettings,
+  type RowLabelStyle,
+  type RowOrder,
+  type SeatDirection,
+} from "@/lib/seat-numbering";
 import { saveSeatPlan, type SeatPlanState } from "./actions";
 
 export type SeatKind = "SEAT" | "WHEELCHAIR" | "AISLE" | "BLOCKED";
@@ -32,12 +41,9 @@ const KINDS: { value: SeatKind; label: string; hint: string }[] = [
   { value: "BLOCKED", label: "Condamnee", hint: "Non vendable" },
 ];
 
-function rowLabelFor(y: number): string {
-  // Au-dela de Z, on passe a AA, AB...
-  if (y < 26) return String.fromCharCode(65 + y);
-  const first = Math.floor(y / 26) - 1;
-  return String.fromCharCode(65 + first) + String.fromCharCode(65 + (y % 26));
-}
+const selectClass =
+  "rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-ink-50 " +
+  "focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
 function SaveButton() {
   const { pending } = useFormStatus();
@@ -54,6 +60,7 @@ export function SeatEditor({
   initialSeats,
   initialRows,
   initialCols,
+  initialNumbering,
   categories,
 }: {
   auditoriumId: string;
@@ -61,6 +68,7 @@ export function SeatEditor({
   initialSeats: EditableSeat[];
   initialRows: number;
   initialCols: number;
+  initialNumbering: NumberingSettings;
   categories: CategoryOption[];
 }) {
   const [state, formAction] = useActionState<SeatPlanState, FormData>(
@@ -71,6 +79,19 @@ export function SeatEditor({
   const [rows, setRows] = useState(initialRows);
   const [cols, setCols] = useState(initialCols);
   const [seats, setSeats] = useState<EditableSeat[]>(initialSeats);
+  const [numbering, setNumbering] = useState<NumberingSettings>(initialNumbering);
+
+  // Libelles forces par l'exploitant, qui l'emportent sur la convention.
+  const [manualLabels, setManualLabels] = useState<Record<number, string>>(() => {
+    const out: Record<number, string> = {};
+    for (const seat of initialSeats) {
+      const expected = rowLabelFor(seat.y, initialRows, initialNumbering);
+      if (seat.rowLabel && seat.rowLabel !== expected) {
+        out[seat.y] = seat.rowLabel;
+      }
+    }
+    return out;
+  });
 
   const [brushKind, setBrushKind] = useState<SeatKind>("SEAT");
   const [brushCategory, setBrushCategory] = useState<string | null>(
@@ -85,32 +106,13 @@ export function SeatEditor({
     return map;
   }, [seats]);
 
-  /**
-   * Renumerote chaque rangee de gauche a droite. Les allees ne consomment pas
-   * de numero : la place a droite d'une allee suit celle de gauche, comme sur
-   * les plans affiches en salle.
-   */
-  function renumber(list: EditableSeat[]): EditableSeat[] {
-    const byRow = new Map<number, EditableSeat[]>();
-    for (const seat of list) {
-      const bucket = byRow.get(seat.y);
-      if (bucket) bucket.push(seat);
-      else byRow.set(seat.y, [seat]);
-    }
-
-    const out: EditableSeat[] = [];
-    for (const [y, rowSeats] of byRow) {
-      let n = 0;
-      for (const seat of rowSeats.sort((a, b) => a.x - b.x)) {
-        if (seat.kind === "AISLE") {
-          out.push({ ...seat, rowLabel: rowLabelFor(y), number: 0 });
-        } else {
-          n += 1;
-          out.push({ ...seat, rowLabel: rowLabelFor(y), number: n });
-        }
-      }
-    }
-    return out;
+  function applyNumbering(
+    list: EditableSeat[],
+    settings = numbering,
+    labels = manualLabels,
+    totalRows = rows,
+  ): EditableSeat[] {
+    return renumberSeats(list, totalRows, settings, labels);
   }
 
   function applyAt(x: number, y: number) {
@@ -120,12 +122,12 @@ export function SeatEditor({
 
       if (eraseMode) {
         if (!existing) return current;
-        return renumber(current.filter((s) => `${s.x}:${s.y}` !== key));
+        return applyNumbering(current.filter((s) => `${s.x}:${s.y}` !== key));
       }
 
       const next: EditableSeat = {
         id: existing?.id,
-        rowLabel: rowLabelFor(y),
+        rowLabel: existing?.rowLabel ?? "",
         number: existing?.number ?? 1,
         x,
         y,
@@ -134,11 +136,10 @@ export function SeatEditor({
       };
 
       const others = current.filter((s) => `${s.x}:${s.y}` !== key);
-      return renumber([...others, next]);
+      return applyNumbering([...others, next]);
     });
   }
 
-  /** Remplit une rangee entiere d'un coup : le geste le plus frequent. */
   function fillRow(y: number) {
     setSeats((current) => {
       const others = current.filter((s) => s.y !== y);
@@ -147,7 +148,7 @@ export function SeatEditor({
         const existing = current.find((s) => s.x === x && s.y === y);
         rowSeats.push({
           id: existing?.id,
-          rowLabel: rowLabelFor(y),
+          rowLabel: existing?.rowLabel ?? "",
           number: 1,
           x,
           y,
@@ -155,12 +156,42 @@ export function SeatEditor({
           categoryId: brushKind === "AISLE" ? null : brushCategory,
         });
       }
-      return renumber([...others, ...rowSeats]);
+      return applyNumbering([...others, ...rowSeats]);
     });
   }
 
   function clearRow(y: number) {
-    setSeats((current) => renumber(current.filter((s) => s.y !== y)));
+    setSeats((current) => applyNumbering(current.filter((s) => s.y !== y)));
+  }
+
+  /** Rejoue la numerotation sur tout le plan avec les reglages courants. */
+  function updateNumbering(patch: Partial<NumberingSettings>) {
+    const next = { ...numbering, ...patch };
+    setNumbering(next);
+    setSeats((current) => applyNumbering(current, next));
+  }
+
+  function setRowLabel(y: number, value: string) {
+    const nextLabels = { ...manualLabels };
+    if (value.trim()) nextLabels[y] = value.trim().toUpperCase();
+    else delete nextLabels[y];
+
+    setManualLabels(nextLabels);
+    setSeats((current) => applyNumbering(current, numbering, nextLabels));
+  }
+
+  function updateRows(value: number) {
+    const next = Math.max(1, Math.min(60, value));
+    setRows(next);
+    // Le libelle depend du nombre de rangees quand on numerote depuis le fond.
+    setSeats((current) =>
+      applyNumbering(
+        current.filter((s) => s.y < next),
+        numbering,
+        manualLabels,
+        next,
+      ),
+    );
   }
 
   const sellableCount = seats.filter(
@@ -179,11 +210,122 @@ export function SeatEditor({
     return categories.find((c) => c.id === seat.categoryId)?.color;
   }
 
+  const payload = JSON.stringify({
+    auditoriumId,
+    gridRows: rows,
+    gridCols: cols,
+    numbering,
+    seats,
+  });
+
   return (
     <form action={formAction} className="space-y-6">
-      <input type="hidden" name="payload" value={JSON.stringify({ auditoriumId, gridRows: rows, gridCols: cols, seats })} />
+      <input type="hidden" name="payload" value={payload} />
 
-      {/* Barre d'outils */}
+      {/* ------------------------------------------------------------------
+          Conventions de numerotation
+          ------------------------------------------------------------------ */}
+      <section className="space-y-4 rounded-xl border border-ink-700 bg-ink-900 p-4">
+        <div>
+          <h2 className="font-display text-lg text-ink-50">Numerotation</h2>
+          <p className="mt-1 text-xs text-ink-400">
+            Reproduisez l&apos;ordre deja en place dans la salle. Toute
+            modification renumerote le plan immediatement.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="space-y-1.5">
+            <span className="block text-xs uppercase tracking-wider text-ink-400">
+              Rangees
+            </span>
+            <select
+              value={numbering.rowLabelStyle}
+              onChange={(e) =>
+                updateNumbering({ rowLabelStyle: e.target.value as RowLabelStyle })
+              }
+              className={selectClass}
+            >
+              <option value="LETTERS">Lettres (A, B, C)</option>
+              <option value="NUMBERS">Chiffres (1, 2, 3)</option>
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="block text-xs uppercase tracking-wider text-ink-400">
+              Premiere rangee
+            </span>
+            <select
+              value={numbering.rowOrder}
+              onChange={(e) =>
+                updateNumbering({ rowOrder: e.target.value as RowOrder })
+              }
+              className={selectClass}
+            >
+              <option value="FROM_SCREEN">Cote ecran</option>
+              <option value="FROM_BACK">Cote fond de salle</option>
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="block text-xs uppercase tracking-wider text-ink-400">
+              Sens des places
+            </span>
+            <select
+              value={numbering.seatDirection}
+              onChange={(e) =>
+                updateNumbering({
+                  seatDirection: e.target.value as SeatDirection,
+                })
+              }
+              className={selectClass}
+            >
+              <option value="LEFT_TO_RIGHT">De gauche a droite</option>
+              <option value="RIGHT_TO_LEFT">De droite a gauche</option>
+            </select>
+          </label>
+
+          <label className="space-y-1.5">
+            <span className="block text-xs uppercase tracking-wider text-ink-400">
+              Premier numero
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={numbering.seatNumberStart}
+              onChange={(e) =>
+                updateNumbering({
+                  seatNumberStart: Math.max(0, Number(e.target.value)),
+                })
+              }
+              className={cn(selectClass, "w-24")}
+            />
+          </label>
+
+          <div className="space-y-1.5">
+            <span className="block text-xs uppercase tracking-wider text-ink-400">
+              Apercu
+            </span>
+            <p className="rounded-lg border border-dashed border-ink-600 px-3 py-2 font-mono text-sm text-brand-300">
+              {previewRow(cols, numbering, rows)}
+            </p>
+          </div>
+        </div>
+
+        {Object.keys(manualLabels).length > 0 && (
+          <p className="text-xs text-ink-400">
+            {Object.keys(manualLabels).length} rangee
+            {Object.keys(manualLabels).length > 1 ? "s" : ""} porte
+            {Object.keys(manualLabels).length > 1 ? "nt" : ""} un libelle
+            personnalise, conserve malgre la convention choisie.
+          </p>
+        )}
+      </section>
+
+      {/* ------------------------------------------------------------------
+          Outils de dessin
+          ------------------------------------------------------------------ */}
       <div className="space-y-4 rounded-xl border border-ink-700 bg-ink-900 p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div>
@@ -234,7 +376,7 @@ export function SeatEditor({
               <select
                 value={brushCategory ?? ""}
                 onChange={(e) => setBrushCategory(e.target.value || null)}
-                className="rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-ink-50"
+                className={selectClass}
               >
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -258,8 +400,8 @@ export function SeatEditor({
                 min={1}
                 max={60}
                 value={rows}
-                onChange={(e) => setRows(Math.max(1, Number(e.target.value)))}
-                className="w-16 rounded-lg border border-ink-600 bg-ink-850 px-2 py-2 text-ink-50"
+                onChange={(e) => updateRows(Number(e.target.value))}
+                className={cn(selectClass, "w-16")}
                 aria-label="Nombre de rangees"
               />
               <span className="text-ink-400">rangees</span>
@@ -268,8 +410,10 @@ export function SeatEditor({
                 min={1}
                 max={60}
                 value={cols}
-                onChange={(e) => setCols(Math.max(1, Number(e.target.value)))}
-                className="w-16 rounded-lg border border-ink-600 bg-ink-850 px-2 py-2 text-ink-50"
+                onChange={(e) =>
+                  setCols(Math.max(1, Math.min(60, Number(e.target.value))))
+                }
+                className={cn(selectClass, "w-16")}
                 aria-label="Nombre de colonnes"
               />
               <span className="text-ink-400">colonnes</span>
@@ -279,12 +423,13 @@ export function SeatEditor({
 
         <p className="text-xs text-ink-400">
           Cliquez une case pour poser ou retirer une place. Maintenez le bouton
-          enfonce pour dessiner plusieurs cases d&apos;affilee. La numerotation se
-          recalcule automatiquement, de gauche a droite, sans compter les allees.
+          enfonce pour dessiner plusieurs cases d&apos;affilee.
         </p>
       </div>
 
-      {/* Grille */}
+      {/* ------------------------------------------------------------------
+          Grille
+          ------------------------------------------------------------------ */}
       <div className="rounded-xl border border-ink-700 bg-ink-900 p-4">
         <div className="mb-4 space-y-1">
           <div className="screen-curve mx-auto h-6 w-full max-w-xl rounded-t-sm" />
@@ -299,91 +444,104 @@ export function SeatEditor({
           onMouseLeave={() => setPainting(false)}
         >
           <div className="w-fit min-w-full space-y-1">
-            {Array.from({ length: rows }, (_, y) => (
-              <div key={y} className="flex items-center gap-2">
-                <span className="w-6 shrink-0 text-right text-[11px] font-medium text-ink-400">
-                  {rowLabelFor(y)}
-                </span>
+            {Array.from({ length: rows }, (_, y) => {
+              const label =
+                manualLabels[y] ?? rowLabelFor(y, rows, numbering);
 
-                <div
-                  className="grid gap-1"
-                  style={{
-                    gridTemplateColumns: `repeat(${cols}, minmax(22px, 1fr))`,
-                  }}
-                >
-                  {Array.from({ length: cols }, (_, x) => {
-                    const seat = seatByPos.get(`${x}:${y}`);
-                    const color = seat ? colorFor(seat) : undefined;
+              return (
+                <div key={y} className="flex items-center gap-2">
+                  {/* Libelle editable : une salle peut avoir une rangee "BALCON". */}
+                  <input
+                    value={label}
+                    onChange={(e) => setRowLabel(y, e.target.value)}
+                    className="w-12 shrink-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-[11px] font-medium text-ink-300 hover:border-ink-600 focus:border-brand-500 focus:outline-none"
+                    aria-label={`Libelle de la rangee ${y + 1}`}
+                    maxLength={3}
+                  />
 
-                    return (
-                      <button
-                        key={x}
-                        type="button"
-                        onMouseDown={() => {
-                          setPainting(true);
-                          applyAt(x, y);
-                        }}
-                        onMouseEnter={() => {
-                          if (painting) applyAt(x, y);
-                        }}
-                        aria-label={
-                          seat
-                            ? `Case colonne ${x + 1}, rangee ${rowLabelFor(y)} : ${seat.kind === "AISLE" ? "allee" : `place ${seat.rowLabel}${seat.number}`}`
-                            : `Case vide colonne ${x + 1}, rangee ${rowLabelFor(y)}`
-                        }
-                        className={cn(
-                          "flex aspect-square items-center justify-center rounded-[4px] text-[9px] transition-colors",
-                          !seat && "border border-dashed border-ink-700 bg-transparent hover:border-brand-500/60",
-                          seat?.kind === "SEAT" && "bg-ink-600 text-ink-100",
-                          seat?.kind === "WHEELCHAIR" && "bg-ink-600 text-brand-300",
-                          seat?.kind === "AISLE" && "bg-ink-800 text-ink-500",
-                          seat?.kind === "BLOCKED" && "bg-danger/25 text-danger",
-                        )}
-                        style={
-                          color && seat && seat.kind !== "BLOCKED"
-                            ? { boxShadow: `inset 0 -2px 0 0 ${color}` }
-                            : undefined
-                        }
-                      >
-                        {seat?.kind === "WHEELCHAIR"
-                          ? "♿"
-                          : seat?.kind === "AISLE"
-                            ? ""
-                            : seat?.kind === "BLOCKED"
-                              ? "✕"
-                              : seat
-                                ? seat.number
-                                : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => fillRow(y)}
-                    className="rounded border border-ink-600 px-1.5 py-0.5 text-[10px] text-ink-300 hover:border-brand-500 hover:text-brand-400"
-                    title={`Remplir la rangee ${rowLabelFor(y)}`}
+                  <div
+                    className="grid gap-1"
+                    style={{
+                      gridTemplateColumns: `repeat(${cols}, minmax(22px, 1fr))`,
+                    }}
                   >
-                    Remplir
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => clearRow(y)}
-                    className="rounded border border-ink-600 px-1.5 py-0.5 text-[10px] text-ink-300 hover:border-danger hover:text-danger"
-                    title={`Vider la rangee ${rowLabelFor(y)}`}
-                  >
-                    Vider
-                  </button>
+                    {Array.from({ length: cols }, (_, x) => {
+                      const seat = seatByPos.get(`${x}:${y}`);
+                      const color = seat ? colorFor(seat) : undefined;
+
+                      return (
+                        <button
+                          key={x}
+                          type="button"
+                          onMouseDown={() => {
+                            setPainting(true);
+                            applyAt(x, y);
+                          }}
+                          onMouseEnter={() => {
+                            if (painting) applyAt(x, y);
+                          }}
+                          aria-label={
+                            seat
+                              ? `Case colonne ${x + 1}, rangee ${label} : ${seat.kind === "AISLE" ? "allee" : `place ${seat.rowLabel}${seat.number}`}`
+                              : `Case vide colonne ${x + 1}, rangee ${label}`
+                          }
+                          className={cn(
+                            "flex aspect-square items-center justify-center rounded-[4px] text-[9px] transition-colors",
+                            !seat &&
+                              "border border-dashed border-ink-700 bg-transparent hover:border-brand-500/60",
+                            seat?.kind === "SEAT" && "bg-ink-600 text-ink-100",
+                            seat?.kind === "WHEELCHAIR" && "bg-ink-600 text-brand-300",
+                            seat?.kind === "AISLE" && "bg-ink-800 text-ink-500",
+                            seat?.kind === "BLOCKED" && "bg-danger/25 text-danger",
+                          )}
+                          style={
+                            color && seat && seat.kind !== "BLOCKED"
+                              ? { boxShadow: `inset 0 -2px 0 0 ${color}` }
+                              : undefined
+                          }
+                        >
+                          {seat?.kind === "WHEELCHAIR"
+                            ? "♿"
+                            : seat?.kind === "AISLE"
+                              ? ""
+                              : seat?.kind === "BLOCKED"
+                                ? "✕"
+                                : seat
+                                  ? seat.number
+                                  : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => fillRow(y)}
+                      className="rounded border border-ink-600 px-1.5 py-0.5 text-[10px] text-ink-300 hover:border-brand-500 hover:text-brand-400"
+                      title={`Remplir la rangee ${label}`}
+                    >
+                      Remplir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => clearRow(y)}
+                      className="rounded border border-ink-600 px-1.5 py-0.5 text-[10px] text-ink-300 hover:border-danger hover:text-danger"
+                      title={`Vider la rangee ${label}`}
+                    >
+                      Vider
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Recapitulatif et enregistrement */}
+      {/* ------------------------------------------------------------------
+          Recapitulatif
+          ------------------------------------------------------------------ */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-ink-700 bg-ink-900 p-4">
         <div className="space-y-1">
           <p className="text-sm text-ink-100">

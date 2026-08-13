@@ -1,11 +1,13 @@
 import type { PaymentProvider } from "@/generated/prisma/enums";
 import { AirtelMoneyGateway } from "./airtel";
 import { MtnMomoGateway } from "./mtn";
+import { isSimulationEnabled, SimulationGateway } from "./simulation";
 import type { PaymentGateway } from "./types";
 
 export * from "./types";
 export { AirtelMoneyGateway, parseAirtelWebhook } from "./airtel";
 export { MtnMomoGateway, parseMtnWebhook } from "./mtn";
+export { isSimulationEnabled, SimulationGateway } from "./simulation";
 
 /**
  * Renvoie la passerelle correspondant au moyen de paiement choisi par le
@@ -13,6 +15,13 @@ export { MtnMomoGateway, parseMtnWebhook } from "./mtn";
  * portabilite existe, donc on ne devine jamais l'operateur a sa place.
  */
 export function getGateway(provider: PaymentProvider): PaymentGateway {
+  // En demonstration, toutes les demandes passent par la passerelle simulee.
+  // Le client voit exactement le meme tunnel, y compris le choix de
+  // l'operateur : seule l'autorisation est jouee localement.
+  if (isSimulationEnabled() && provider !== "CASH" && provider !== "SUBSCRIPTION") {
+    return new SimulationGateway();
+  }
+
   switch (provider) {
     case "AIRTEL_MONEY":
       return new AirtelMoneyGateway();

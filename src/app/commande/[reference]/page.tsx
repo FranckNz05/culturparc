@@ -5,6 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { resolveSeatPrice, type PricingRule } from "@/lib/pricing";
+import { isSimulationEnabled } from "@/lib/payments";
 import { formatDayLong, formatTime } from "@/lib/utils";
 import { CheckoutForm, type SeatLineData } from "./checkout-form";
 import { CountdownNotice } from "./countdown-notice";
@@ -99,6 +100,18 @@ export default async function CheckoutPage({
             {booking.showtime.cinema.name}, {booking.showtime.auditorium.name}
           </p>
         </header>
+
+        {isSimulationEnabled() && (
+          <div className="mb-6 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+            <p className="font-medium">Mode demonstration</p>
+            <p className="mt-1 text-warning/90">
+              Aucun paiement reel n&apos;est effectue. Le paiement se confirme
+              seul apres quelques secondes. Pour voir un echec, terminez le
+              numero payeur par 0 (solde insuffisant), 1 (code PIN errone) ou 2
+              (client qui ne repond pas).
+            </p>
+          </div>
+        )}
 
         {expired ? (
           <div className="rounded-xl border border-danger/40 bg-danger/10 p-6 text-center">

@@ -104,6 +104,9 @@ model Cinema {
   city    String // "Brazzaville"
   address String?
   phone   String? // "06 110 92 01"
+  email   String?
+  // Presentation du site, affichee sur la page de la ville.
+  description String?
   lat     Float?
   lng     Float?
   active  Boolean @default(true)
@@ -120,6 +123,24 @@ model Cinema {
   updatedAt DateTime @updatedAt
 
   @@map("cinemas")
+}
+
+/** Rangees notees A, B, C ou 1, 2, 3. */
+enum RowLabelStyle {
+  LETTERS
+  NUMBERS
+}
+
+/** La rangee A est-elle celle de l'ecran ou celle du fond ? */
+enum RowOrder {
+  FROM_SCREEN
+  FROM_BACK
+}
+
+/** Sens de numerotation des places dans une rangee, vu depuis la salle. */
+enum SeatDirection {
+  LEFT_TO_RIGHT
+  RIGHT_TO_LEFT
 }
 
 enum ScreenType {
@@ -139,6 +160,14 @@ model Auditorium {
   // Dimensions de la grille utilisee par l'editeur de plan.
   gridRows Int @default(12)
   gridCols Int @default(18)
+
+  // Conventions de numerotation propres a la salle. Une salle deja exploitee a
+  // souvent son ordre etabli, que le public et le personnel connaissent : ces
+  // reglages permettent de le reproduire au lieu de l'imposer.
+  rowLabelStyle  RowLabelStyle  @default(LETTERS)
+  rowOrder       RowOrder       @default(FROM_SCREEN)
+  seatDirection  SeatDirection  @default(LEFT_TO_RIGHT)
+  seatNumberStart Int           @default(1)
 
   active Boolean @default(true)
 
@@ -230,7 +259,10 @@ model Movie {
   releaseDate DateTime?
   posterUrl   String?
   backdropUrl String?
+  // Bande-annonce : lien YouTube, Vimeo ou fichier video directement lisible.
   trailerUrl  String?
+  // Extrait muet de quelques secondes, joue en boucle au survol de l'affiche.
+  previewVideoUrl String?
   director    String?
   cast        String[]    @default([])
   // Age minimum conseille : 0, 12, 16, 18. Les affiches Culture Parc affichent "-12".
@@ -248,6 +280,33 @@ model Movie {
 
   @@index([status])
   @@map("movies")
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+/**
+ * Fichier televerse depuis le back-office (affiche, extrait video).
+ *
+ * Le contenu vit dans la base plutot que sur le disque : l'hebergement cible
+ * (Render) monte un disque ephemere, remis a zero a chaque deploiement. Un
+ * fichier ecrit sur ce disque disparaitrait a la mise en ligne suivante, et les
+ * affiches du catalogue avec lui.
+ */
+model MediaAsset {
+  id       String    @id @default(cuid())
+  filename String
+  mimeType String
+  size     Int // en octets
+  kind     MediaKind
+  data     Bytes
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("media_assets")
 }
 
 model Genre {
@@ -307,6 +366,7 @@ model Showtime {
   seatHolds SeatHold[]
   tickets   Ticket[]
   bookings  Booking[]
+  notifications NotificationLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -455,6 +515,7 @@ model Booking {
   seatHolds     SeatHold[]
   loyaltyLedger LoyaltyTransaction[]
   ticketLines   BookingTicketLine[]
+  notifications NotificationLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -709,6 +770,55 @@ enum ScanResult {
   WRONG_SHOWTIME // billet valable, mais pas pour cette seance
   TOO_EARLY
   CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Notifications sortantes
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED // aucun fournisseur configure, ou destinataire sans coordonnees
+}
+
+enum NotificationKind {
+  SHOWTIME_CANCELLED
+  BOOKING_CONFIRMED
+}
+
+// Journal des messages envoyes aux clients.
+// Sert de preuve d'envoi en cas de litige sur une seance annulee, et evite
+// d'avertir deux fois la meme personne si l'annulation est rejouee.
+model NotificationLog {
+  id      String              @id @default(cuid())
+  kind    NotificationKind
+  channel NotificationChannel
+  status  NotificationStatus  @default(PENDING)
+
+  recipient String // email ou numero au format international
+  subject   String?
+  body      String
+
+  bookingId  String?
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  showtimeId String?
+  showtime   Showtime? @relation(fields: [showtimeId], references: [id], onDelete: SetNull)
+
+  error  String?
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([kind, showtimeId])
+  @@index([createdAt])
+  @@map("notification_logs")
 }
 
 model ScanLog {

@@ -10,6 +10,7 @@ const NAV = [
   { href: "/admin/seances", label: "Seances" },
   { href: "/admin/films", label: "Films" },
   { href: "/admin/salles", label: "Salles et plans" },
+  { href: "/admin/sites", label: "Sites et villes" },
   { href: "/admin/tarifs", label: "Tarifs" },
 ];
 

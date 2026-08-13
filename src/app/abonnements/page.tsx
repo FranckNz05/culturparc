@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { getSubscriptionPlans } from "@/lib/queries";
 import { formatFcfa } from "@/lib/utils";
 
-export const revalidate = 3600;
+// Le choix de ville vit dans un cookie : le rendu ne peut pas etre mis en cache.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Abonnements",

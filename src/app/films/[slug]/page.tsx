@@ -6,9 +6,13 @@ import { Poster } from "@/components/poster";
 import { AgeBadge, Badge } from "@/components/ui/badge";
 import { ShowtimeList } from "@/components/showtime-list";
 import { getMovieBySlug, getUpcomingShowtimes } from "@/lib/queries";
+import { getActiveCity } from "@/lib/city";
 import { formatDuration } from "@/lib/utils";
+import { parseVideoUrl } from "@/lib/video";
+import { TrailerPlayer } from "@/components/trailer-player";
 
-export const revalidate = 300;
+// Le choix de ville vit dans un cookie : le rendu ne peut pas etre mis en cache.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -36,7 +40,13 @@ export default async function MoviePage({ params }: PageProps<"/films/[slug]">) 
 
   if (!movie) notFound();
 
-  const showtimes = await getUpcomingShowtimes({ movieId: movie.id });
+  // Le programme d'une ville n'est pas celui d'une autre : on ne montre que
+  // les seances de la ville choisie.
+  const { city } = await getActiveCity();
+  const showtimes = await getUpcomingShowtimes({
+    movieId: movie.id,
+    cinemaIds: city?.cinemas.map((c) => c.id),
+  });
 
   return (
     <>
@@ -48,6 +58,7 @@ export default async function MoviePage({ params }: PageProps<"/films/[slug]">) 
             <Poster
               src={movie.posterUrl}
               title={movie.title}
+              previewVideoUrl={movie.previewVideoUrl}
               priority
               sizes="(max-width: 640px) 50vw, 220px"
               className="aspect-2/3 w-40 shrink-0 self-start sm:w-52"
@@ -90,23 +101,17 @@ export default async function MoviePage({ params }: PageProps<"/films/[slug]">) 
                 </p>
               )}
 
-              {movie.trailerUrl && (
-                <a
-                  href={movie.trailerUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-block text-sm font-medium text-brand-400 hover:underline"
-                >
-                  Voir la bande-annonce
-                </a>
-              )}
+              <TrailerPlayer
+                source={parseVideoUrl(movie.trailerUrl)}
+                movieTitle={movie.title}
+              />
             </div>
           </div>
         </div>
 
         <section className="mx-auto max-w-5xl px-4 py-10">
           <h2 className="mb-6 font-display text-2xl text-ink-50">
-            Seances et reservation
+            Seances et reservation{city ? ` a ${city.name}` : ""}
           </h2>
           <ShowtimeList showtimes={showtimes} />
         </section>

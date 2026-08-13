@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn, formatFcfa } from "@/lib/utils";
 import { MAX_SEATS_PER_BOOKING } from "@/lib/constants";
 import type { SeatMapView, SeatView } from "@/lib/seating";
@@ -106,18 +106,26 @@ export function SeatMap({
   const total = selected.reduce((sum, s) => sum + s.price, 0);
   const limitReached = selectedIds.length >= MAX_SEATS_PER_BOOKING;
 
+  // La remontee vers le formulaire parent se fait apres le rendu, jamais depuis
+  // l'updater de setState : prevenir un autre composant pendant qu'on calcule
+  // son propre etat revient a le mettre a jour en plein rendu, ce que React
+  // signale comme une erreur.
+  useEffect(() => {
+    onSelectionChange?.(selected);
+    // onSelectionChange est recree a chaque rendu du parent : le suivre ici
+    // relancerait l'effet en boucle. Seule la selection doit le declencher.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
+
   function toggle(seat: SeatView) {
     setSelectedIds((current) => {
-      const next = current.includes(seat.id)
-        ? current.filter((id) => id !== seat.id)
-        : current.length >= MAX_SEATS_PER_BOOKING
-          ? current
-          : [...current, seat.id];
-
-      onSelectionChange?.(
-        seatMap.seats.filter((s) => next.includes(s.id)),
-      );
-      return next;
+      if (current.includes(seat.id)) {
+        return current.filter((id) => id !== seat.id);
+      }
+      if (current.length >= MAX_SEATS_PER_BOOKING) {
+        return current;
+      }
+      return [...current, seat.id];
     });
   }
 

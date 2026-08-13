@@ -9,17 +9,25 @@ const seatSchema = z.object({
   // Present pour un siege existant, absent pour un siege qu'on vient de poser.
   id: z.string().optional(),
   rowLabel: z.string().min(1).max(3),
-  number: z.number().int().min(1).max(999),
+  number: z.number().int().min(0).max(999),
   x: z.number().int().min(0).max(99),
   y: z.number().int().min(0).max(99),
   kind: z.enum(["SEAT", "WHEELCHAIR", "AISLE", "BLOCKED"]),
   categoryId: z.string().nullable(),
 });
 
+const numberingSchema = z.object({
+  rowLabelStyle: z.enum(["LETTERS", "NUMBERS"]),
+  rowOrder: z.enum(["FROM_SCREEN", "FROM_BACK"]),
+  seatDirection: z.enum(["LEFT_TO_RIGHT", "RIGHT_TO_LEFT"]),
+  seatNumberStart: z.number().int().min(0).max(100),
+});
+
 const payloadSchema = z.object({
   auditoriumId: z.string().min(1),
   gridRows: z.number().int().min(1).max(60),
   gridCols: z.number().int().min(1).max(60),
+  numbering: numberingSchema,
   seats: z.array(seatSchema).max(2000),
 });
 
@@ -55,7 +63,7 @@ export async function saveSeatPlan(
     return { error: parsed.error.issues[0]?.message ?? "Plan invalide." };
   }
 
-  const { auditoriumId, gridRows, gridCols, seats } = parsed.data;
+  const { auditoriumId, gridRows, gridCols, numbering, seats } = parsed.data;
 
   const auditorium = await prisma.auditorium.findUnique({
     where: { id: auditoriumId },
@@ -133,7 +141,7 @@ export async function saveSeatPlan(
     await prisma.$transaction(async (tx) => {
       await tx.auditorium.update({
         where: { id: auditoriumId },
-        data: { gridRows, gridCols },
+        data: { gridRows, gridCols, ...numbering },
       });
 
       if (removedIds.length > 0) {

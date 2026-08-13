@@ -273,72 +273,98 @@ async function main() {
   const moviesData: Array<{
     slug: string;
     title: string;
+    originalTitle?: string;
     synopsis: string;
     durationMin: number;
     director?: string;
+    cast?: string[];
     minAge: number;
     status: "NOW_SHOWING" | "COMING_SOON";
     featured?: boolean;
+    posterUrl?: string;
+    backdropUrl?: string;
+    trailerUrl?: string;
     genres: string[];
   }> = [
     {
       slug: "l-odyssee",
       title: "L'Odyssee",
+      originalTitle: "The Odyssey",
       synopsis:
-        "L'adaptation par Christopher Nolan de l'epopee d'Homere. Apres la guerre de Troie, Ulysse affronte dieux et monstres pour retrouver Ithaque.",
-      durationMin: 168,
+        "Ulysse, roi d'Ithaque, entreprend un long et perilleux retour apres la guerre de Troie. Tout au long de son voyage, il affronte les caprices des dieux, des monstres mythologiques et de rudes epreuves.",
+      durationMin: 173,
       director: "Christopher Nolan",
+      cast: ["Matt Damon", "Anne Hathaway", "Tom Holland", "Zendaya"],
       minAge: 12,
-      status: "NOW_SHOWING" as const,
+      status: "NOW_SHOWING",
       featured: true,
-      genres: ["Aventure", "Drame"],
+      posterUrl: "https://image.tmdb.org/t/p/w500/5rhTDKUhPYvpdQIijFIs5VoWsON.jpg",
+      backdropUrl: "https://image.tmdb.org/t/p/w1280/RMXG8myu1aGlNUsRjtxzmpdMK0.jpg",
+      trailerUrl: "https://www.youtube.com/watch?v=Mzw2ttJD2qQ",
+      genres: ["Aventure", "Action"],
     },
     {
       slug: "spider-man-brand-new-day",
       title: "Spider-Man: Brand New Day",
       synopsis:
-        "Peter Parker reprend le masque dans un New York qui ne se souvient plus de lui.",
-      durationMin: 132,
+        "Peter Parker combat le crime a plein temps dans un monde qui ne se souvient plus de lui. Voir ses anciens amis avancer sans lui declenche un changement qu'il ne maitrise pas, et qui pourrait pourtant seul arreter une menace invisible.",
+      durationMin: 145,
+      director: "Destin Daniel Cretton",
+      cast: ["Tom Holland", "Zendaya", "Jacob Batalon"],
       minAge: 0,
-      status: "NOW_SHOWING" as const,
+      status: "NOW_SHOWING",
       featured: true,
+      posterUrl: "https://image.tmdb.org/t/p/w500/iPOn6DinuVyLY17YM9mKuPofV08.jpg",
+      backdropUrl: "https://image.tmdb.org/t/p/w1280/qeQJx07rK2xm8SD2sJxFKhE7gs0.jpg",
+      trailerUrl: "https://www.youtube.com/watch?v=8TZMtslA3UY",
       genres: ["Action", "Aventure", "Science-fiction"],
     },
     {
-      slug: "n121-bus-de-nuit",
-      title: "N121 Bus de nuit",
+      slug: "zootopie-2",
+      title: "Zootopie 2",
+      originalTitle: "Zootopia 2",
       synopsis:
-        "Une nuit, un bus, et des passagers qui n'auraient jamais du se croiser.",
-      durationMin: 104,
-      minAge: 12,
-      status: "NOW_SHOWING" as const,
-      genres: ["Thriller"],
+        "Apres avoir resolu la plus grande enquete de l'histoire de Zootopie, Judy Hopps et Nick Wilde suivent la piste d'un nouveau mystere. Pour y voir clair, ils doivent infiltrer des quartiers inconnus, et leur duo n'a jamais ete autant mis a l'epreuve.",
+      durationMin: 108,
+      director: "Jared Bush",
+      cast: ["Ginnifer Goodwin", "Jason Bateman"],
+      minAge: 0,
+      status: "NOW_SHOWING",
+      posterUrl: "https://image.tmdb.org/t/p/w500/oJ7g2CifqpStmoYQyaLQgEU32qO.jpg",
+      backdropUrl: "https://image.tmdb.org/t/p/w1280/lgotja3xMoJZbynwHfcQcJAEMWH.jpg",
+      trailerUrl: "https://www.youtube.com/watch?v=BjkIOU5PhyQ",
+      genres: ["Animation", "Famille", "Comedie"],
     },
     {
-      slug: "tombe-du-ciel",
-      title: "Tombe du ciel",
-      synopsis: "Une comedie sur un heritage inattendu qui bouleverse un quartier.",
-      durationMin: 98,
+      slug: "wicked-partie-2",
+      title: "Wicked : Partie 2",
+      originalTitle: "Wicked: For Good",
+      synopsis:
+        "Alors qu'une foule en colere se souleve contre la Mechante Sorciere, Glinda et Elphaba doivent se retrouver une derniere fois. Leur amitie devient le point d'appui de leur avenir, et celui de tout Oz.",
+      durationMin: 137,
+      director: "Jon M. Chu",
+      cast: ["Cynthia Erivo", "Ariana Grande", "Jeff Goldblum", "Michelle Yeoh"],
       minAge: 0,
-      status: "NOW_SHOWING" as const,
-      genres: ["Comedie"],
-    },
-    {
-      slug: "pat-patrouille-mission-dino",
-      title: "Pat Patrouille : Mission Dino",
-      synopsis: "La Pat Patrouille part sur les traces des dinosaures.",
-      durationMin: 88,
-      minAge: 0,
-      status: "NOW_SHOWING" as const,
-      genres: ["Animation", "Famille"],
+      status: "NOW_SHOWING",
+      posterUrl: "https://image.tmdb.org/t/p/w500/si9tolnefLSUKaqQEGz1bWArOaL.jpg",
+      backdropUrl: "https://image.tmdb.org/t/p/w1280/cGbPBHKSFO7hSIjxkb3KOaGdOep.jpg",
+      trailerUrl: "https://www.youtube.com/watch?v=vt98AlBDI9Y",
+      genres: ["Aventure", "Drame"],
     },
     {
       slug: "avatar-de-feu-et-de-cendres",
       title: "Avatar : De feu et de cendres",
-      synopsis: "Le retour sur Pandora, entre clans rivaux et terres brulees.",
-      durationMin: 190,
+      originalTitle: "Avatar: Fire and Ash",
+      synopsis:
+        "Apres la guerre contre la RDA et la perte de leur fils aine, Jake Sully et Neytiri affrontent une nouvelle menace sur Pandora : le Peuple des Cendres, une tribu Na'vi violente menee par l'implacable Varang.",
+      durationMin: 198,
+      director: "James Cameron",
+      cast: ["Sam Worthington", "Zoe Saldana", "Sigourney Weaver"],
       minAge: 12,
-      status: "COMING_SOON" as const,
+      status: "COMING_SOON",
+      posterUrl: "https://image.tmdb.org/t/p/w500/bRBeSHfGHwkEpImlhxPmOcUsaeg.jpg",
+      backdropUrl: "https://image.tmdb.org/t/p/w1280/sdZSjtGUTSN8B3al5o0f2WoQfQQ.jpg",
+      trailerUrl: "https://www.youtube.com/watch?v=nb_fFj_0rq8",
       genres: ["Science-fiction", "Aventure"],
     },
   ];
@@ -348,7 +374,13 @@ async function main() {
     const { genres, ...data } = m;
     const movie = await prisma.movie.upsert({
       where: { slug: m.slug },
-      update: { status: data.status, featured: data.featured ?? false },
+      update: {
+        status: data.status,
+        featured: data.featured ?? false,
+        posterUrl: data.posterUrl ?? null,
+        backdropUrl: data.backdropUrl ?? null,
+        trailerUrl: data.trailerUrl ?? null,
+      },
       create: {
         ...data,
         genres: {

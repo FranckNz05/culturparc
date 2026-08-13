@@ -3,8 +3,10 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { MovieCard } from "@/components/movie-card";
 import { getComingSoonMovies, getNowShowingMovies } from "@/lib/queries";
+import { getActiveCity } from "@/lib/city";
 
-export const revalidate = 300;
+// Le choix de ville vit dans un cookie : le rendu ne peut pas etre mis en cache.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Films a l'affiche",
@@ -13,8 +15,10 @@ export const metadata: Metadata = {
 };
 
 export default async function MoviesPage() {
+  const { city } = await getActiveCity();
+
   const [nowShowing, comingSoon] = await Promise.all([
-    getNowShowingMovies(),
+    getNowShowingMovies(city?.cinemas.map((c) => c.id)),
     getComingSoonMovies(),
   ]);
 
@@ -24,7 +28,7 @@ export default async function MoviesPage() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10">
         <h1 className="font-display text-3xl text-ink-50 sm:text-4xl">
-          Films a l&apos;affiche
+          Films a l&apos;affiche{city ? ` a ${city.name}` : ""}
         </h1>
         <p className="mt-2 text-sm text-ink-300">
           {nowShowing.length} film{nowShowing.length > 1 ? "s" : ""} avec des

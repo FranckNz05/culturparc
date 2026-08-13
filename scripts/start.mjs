@@ -47,12 +47,24 @@ async function databaseAnswers() {
   try {
     await client.connect();
     await client.query("select 1");
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, code: error.code, message: error.message };
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+/**
+ * Distingue les deux echecs, qui n'appellent pas la meme reponse.
+ *
+ * Un nom d'hote qui ne resout pas ne resoudra pas davantage dans dix secondes :
+ * l'hote interne dpg-... n'est visible que depuis la region de la base, donc
+ * attendre est inutile et il faut le dire tout de suite. Une connexion refusee,
+ * elle, signale une base qui n'a pas fini de demarrer, et la patience suffit.
+ */
+function hostnameUnresolvable(result) {
+  return result.code === "ENOTFOUND" || result.code === "EAI_AGAIN";
 }
 
 async function main() {
@@ -76,7 +88,9 @@ async function main() {
   console.log(`Attente de la base ${host}...`);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (await databaseAnswers()) {
+    const result = await databaseAnswers();
+
+    if (result.ok) {
       console.log(`Base joignable (tentative ${attempt}).`);
 
       await run("npx", ["prisma", "migrate", "deploy"]);
@@ -84,8 +98,35 @@ async function main() {
       return;
     }
 
+    if (hostnameUnresolvable(result)) {
+      console.error(
+        [
+          "",
+          `Le nom d'hote ${host} n'existe pas pour ce service.`,
+          "",
+          "Un hote interne Render (dpg-...-a) n'est visible que depuis la region",
+          "de la base. Attendre n'y changera rien.",
+          "",
+          "Deux corrections possibles, au choix :",
+          "",
+          "  1. Aligner les regions. Dans le tableau de bord, comparez la region",
+          "     de la base et celle du service web. Si elles different, supprimez",
+          "     la base et laissez le blueprint la recreer dans la region du",
+          "     service (render.yaml la fixe a frankfurt).",
+          "",
+          "  2. Passer par l'adresse externe, qui fonctionne quelle que soit la",
+          "     region. Sur la page de la base, section Connections, copiez",
+          "     l'External Database URL, puis collez-la dans DATABASE_URL depuis",
+          "     l'onglet Environment du service web. Elle ressemble a :",
+          "     postgresql://...@dpg-....frankfurt-postgres.render.com/cultureparc",
+          "",
+        ].join("\n"),
+      );
+      process.exit(1);
+    }
+
     console.log(
-      `Base injoignable (tentative ${attempt}/${MAX_ATTEMPTS}), nouvel essai dans ${DELAY_MS / 1000}s.`,
+      `Base injoignable (tentative ${attempt}/${MAX_ATTEMPTS}) : ${result.code ?? result.message}. Nouvel essai dans ${DELAY_MS / 1000}s.`,
     );
     await new Promise((r) => setTimeout(r, DELAY_MS));
   }
@@ -94,13 +135,8 @@ async function main() {
     [
       "",
       `La base ${host} est restee injoignable apres ${MAX_ATTEMPTS} tentatives.`,
-      "",
-      "Deux causes possibles sur Render :",
-      "  1. La base et le service web ne sont pas dans la meme region. Le reseau",
-      "     prive ne relie que des ressources d'une meme region, et le nom d'hote",
-      "     interne dpg-... n'est pas resolvable au-dela. Comparez les regions",
-      "     dans le tableau de bord.",
-      "  2. La base n'a pas fini d'etre creee, ou a ete suspendue.",
+      "Elle repond au reseau mais refuse les connexions : verifiez dans le",
+      "tableau de bord qu'elle est bien demarree et non suspendue.",
       "",
     ].join("\n"),
   );

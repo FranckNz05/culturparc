@@ -96,6 +96,30 @@ Prisma n'est cree qu'au premier usage. La sonde `/api/sante`, elle, interroge
 reellement la base, pour qu'un service coupe de sa base soit redemarre plutot
 que de repondre a vide.
 
+### Si la base reste injoignable au demarrage
+
+Le nom d'hote interne d'une base Render (`dpg-...-a`) n'est visible que depuis
+**sa propre region**. Si le service web et la base ne sont pas dans la meme
+region, la connexion echoue avec un `P1001`, et attendre n'y change rien.
+
+Deux corrections, au choix :
+
+1. **Aligner les regions.** Comparez-les dans le tableau de bord. Si elles
+   different, supprimez la base et laissez le blueprint la recreer : le
+   `render.yaml` fixe desormais la base et le service a `frankfurt`. Une base
+   vide ne fait rien perdre.
+
+2. **Passer par l'adresse externe**, qui fonctionne quelle que soit la region.
+   Sur la page de la base, section *Connections*, copiez l'*External Database
+   URL*, puis collez-la dans `DATABASE_URL` depuis l'onglet *Environment* du
+   service web. Elle se termine par `.frankfurt-postgres.render.com`. C'est la
+   correction la plus rapide, applicable sans redeployer.
+
+`scripts/start.mjs` distingue les deux situations : un nom d'hote non resolu
+arrete le demarrage immediatement avec ces instructions, tandis qu'une connexion
+refusee, signe d'une base qui n'a pas fini de demarrer, declenche de nouvelles
+tentatives.
+
 ## Organisation
 
 ```

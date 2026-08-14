@@ -67,6 +67,42 @@ function hostnameUnresolvable(result) {
   return result.code === "ENOTFOUND" || result.code === "EAI_AGAIN";
 }
 
+/**
+ * Amorce le catalogue si la base est encore vide.
+ *
+ * Les migrations creent les tables, jamais les donnees : sans cette etape, un
+ * deploiement neuf presente un site sans cinema, sans film, et surtout sans
+ * compte administrateur, donc impossible a configurer. La connexion echouerait
+ * sur un CredentialsSignin parfaitement exact mais incomprehensible.
+ *
+ * Le declencheur est l'absence totale de cinema. Des qu'un seul existe, plus
+ * rien n'est ecrit : les donnees reelles de l'exploitant ne risquent jamais
+ * d'etre ecrasees par le jeu de demonstration.
+ */
+async function seedIfEmpty() {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  try {
+    await client.connect();
+    const { rows } = await client.query("select count(*)::int as n from cinemas");
+
+    if (rows[0].n > 0) {
+      console.log(`Catalogue deja renseigne (${rows[0].n} cinemas), amorcage ignore.`);
+      return;
+    }
+
+    console.log("Base vide : amorcage du catalogue de demonstration...");
+    await run("npx", ["prisma", "db", "seed"]);
+  } catch (error) {
+    // Un amorcage rate ne doit pas empecher le service de demarrer : le site
+    // s'affichera vide, ce qui reste diagnosticable, alors qu'un service mort
+    // ne dit rien.
+    console.error("Amorcage impossible :", error.message);
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     console.error(
@@ -94,6 +130,7 @@ async function main() {
       console.log(`Base joignable (tentative ${attempt}).`);
 
       await run("npx", ["prisma", "migrate", "deploy"]);
+      await seedIfEmpty();
       await run("npm", ["run", "start:next"]);
       return;
     }

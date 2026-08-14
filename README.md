@@ -84,6 +84,16 @@ Deux variables sont a saisir a la main dans le tableau de bord :
 - `TICKET_QR_SECRET` : la changer invalide tous les billets deja emis.
 - Les identifiants Airtel et MTN, quand ils sont disponibles.
 
+Au premier demarrage, `scripts/start.mjs` amorce le catalogue de demonstration
+si la base ne contient encore aucun cinema. C'est ce qui cree le compte
+administrateur : sans lui, la connexion echouerait sur un `CredentialsSignin`,
+message exact mais peu parlant, et le site serait impossible a configurer. Le
+Shell Render, qui permettrait de lancer `prisma db seed` a la main, n'est pas
+disponible sur le plan gratuit.
+
+Des qu'un cinema existe, plus rien n'est amorce : les donnees reelles de
+l'exploitant ne risquent pas d'etre ecrasees par le jeu de demonstration.
+
 Les migrations tournent **au demarrage**, pas au build. La base Render n'est
 joignable que depuis le reseau prive, auquel la phase de build n'a pas acces :
 `prisma migrate deploy` y echouerait sur un `P1001 Can't reach database server`.

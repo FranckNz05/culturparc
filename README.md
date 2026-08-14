@@ -94,6 +94,18 @@ disponible sur le plan gratuit.
 Des qu'un cinema existe, plus rien n'est amorce : les donnees reelles de
 l'exploitant ne risquent pas d'etre ecrasees par le jeu de demonstration.
 
+### Fuseau horaire
+
+`TZ="Africa/Brazzaville"` est declare dans `render.yaml`. Sans lui, le serveur
+raisonne en UTC : une seance de 19h00 s'affiche 18h00, et le poste de controle
+cherche les seances de la mauvaise heure. Pour une billetterie, des horaires
+approximativement justes ne valent pas mieux que des horaires faux.
+
+Les seances creees **avant** l'ajout de cette variable ont ete enregistrees a
+l'heure UTC et apparaitront donc decalees d'une heure. Elles n'ont d'interet que
+pour la demonstration : annulez-les depuis `/admin/seances` et reprogrammez-les,
+ou repartez d'une base vide pour que l'amorcage rejoue aux bonnes heures.
+
 Les migrations tournent **au demarrage**, pas au build. La base Render n'est
 joignable que depuis le reseau prive, auquel la phase de build n'a pas acces :
 `prisma migrate deploy` y echouerait sur un `P1001 Can't reach database server`.

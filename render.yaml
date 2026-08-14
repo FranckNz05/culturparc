@@ -55,6 +55,14 @@ services:
       - key: NODE_VERSION
         value: "22"
 
+      # Sans cette variable, le serveur raisonne en UTC alors que les salles
+      # vivent a l'heure de Brazzaville (UTC+1, sans changement d'heure). Une
+      # seance de 19h00 s'afficherait 18h00, et le poste de controle chercherait
+      # les seances de la mauvaise heure. Les horaires sont le coeur du metier :
+      # ils doivent etre justes, pas approximativement justes.
+      - key: TZ
+        value: "Africa/Brazzaville"
+
       # Render coupe les connexions inactives : une pool modeste suffit sur le
       # plan gratuit, qui limite de toute facon le nombre de connexions.
       - key: DATABASE_POOL_MAX

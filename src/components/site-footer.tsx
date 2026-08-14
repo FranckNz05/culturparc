@@ -34,6 +34,11 @@ export async function SiteFooter() {
                 Abonnements
               </Link>
             </li>
+            <li>
+              <Link href="/billets/retrouver" className="hover:text-brand-400">
+                Retrouver mes billets
+              </Link>
+            </li>
           </ul>
         </div>
 

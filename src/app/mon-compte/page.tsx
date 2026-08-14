@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { formatDayLong, formatFcfa, formatTime } from "@/lib/utils";
+import { PasswordForm } from "./password-form";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,11 @@ export default async function AccountPage() {
             Se connecter
           </ButtonLink>
           <p className="mt-8 text-xs text-ink-400">
-            Vous avez reserve sans compte ? Votre billet reste accessible par le
-            lien recu apres le paiement.
+            Vous avez reserve sans compte ?{" "}
+            <Link href="/billets/retrouver" className="text-brand-400 hover:underline">
+              Retrouvez vos billets
+            </Link>{" "}
+            avec votre reference de commande et votre telephone.
           </p>
         </main>
         <SiteFooter />
@@ -179,6 +183,15 @@ export default async function AccountPage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="mt-10 max-w-md">
+          <h2 className="mb-4 font-display text-xl text-ink-50">
+            Mot de passe
+          </h2>
+          <div className="rounded-xl border border-ink-700 bg-ink-900 p-5">
+            <PasswordForm />
+          </div>
         </section>
       </main>
 

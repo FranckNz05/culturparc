@@ -12,6 +12,7 @@ const NAV = [
   { href: "/admin/salles", label: "Salles et plans" },
   { href: "/admin/sites", label: "Sites et villes" },
   { href: "/admin/tarifs", label: "Tarifs" },
+  { href: "/admin/utilisateurs", label: "Comptes" },
 ];
 
 export default async function AdminLayout({

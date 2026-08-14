@@ -158,11 +158,24 @@ src/lib/ticket-pdf.ts         Billet imprimable
 src/lib/city.ts               Ville active et filtrage du programme
 src/lib/media.ts              Televersement des affiches et videos
 src/lib/notifications.ts      Email et SMS aux clients
+src/app/admin/utilisateurs/   Comptes du personnel : creation, role, mot de passe
+src/app/billets/retrouver/    Retrouver une commande sans compte (reference + telephone)
 src/app/(pages publiques)     Accueil, films, programme, seance, commande
 src/app/admin/                Back-office
 src/app/scan/                 Poste de controle d'acces
 scripts/                      Preparation du logo et des icones
 ```
+
+## Comptes et mots de passe
+
+Seul un administrateur cree un compte du personnel, depuis `/admin/utilisateurs` :
+nom, email, telephone, role, site de rattachement, mot de passe initial (12
+caracteres minimum, un generateur est propose). La personne le change ensuite
+depuis `/mon-compte`, en confirmant l'ancien : sans cette confirmation, un poste
+laisse ouvert quelques minutes suffirait a en prendre le controle definitif. Un
+administrateur peut aussi reinitialiser le mot de passe de quelqu'un d'autre en
+cas d'oubli, mais ne peut pas changer son propre role : ce serait le moyen le
+plus simple de se verrouiller dehors, sans recours.
 
 ## Points de conception
 
@@ -188,6 +201,16 @@ ensemble sans creer de doublon.
 meme place : `SeatHold @@unique([showtimeId, seatId])` et
 `Ticket @@unique([showtimeId, seatId])`. Le code applicatif verifie d'abord pour
 produire un message clair, mais c'est PostgreSQL qui tranche sous forte charge.
+
+**Retrouver un billet sans compte engage une verification, pas une simple
+recherche.** La reference de commande (six caracteres) circule par SMS et par
+l'historique du navigateur : la retrouver ne doit pas suffire a voir les places
+de quelqu'un d'autre. `/billets/retrouver` exige donc aussi le telephone utilise
+au paiement, et le meme message d'erreur couvre "commande introuvable" et
+"telephone incorrect", pour ne pas confirmer a un tiers qu'une reference
+devinee existe. Le rappel de telecharger le PDF s'affiche des l'emission du
+billet, uniquement pour les commandes sans compte : c'est le seul moment ou le
+client a la fois le billet sous les yeux et un moyen de le garder.
 
 **Les QR sont chiffres, pas seulement signes.** `AES-256-GCM` authentifie le
 contenu : un billet ne peut etre ni fabrique ni modifie sans la cle du serveur.

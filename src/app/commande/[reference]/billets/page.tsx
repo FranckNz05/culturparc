@@ -27,6 +27,11 @@ export default async function TicketsPage({
 
   if (!booking) notFound();
 
+  // Un compte permet de retrouver ses billets sous "Mes reservations" ; sans
+  // compte, cette page est le seul acces facile et l'avertissement doit etre
+  // vu, pas suppose lu.
+  const isGuest = !booking.userId;
+
   if (booking.status !== "PAID" || booking.tickets.length === 0) {
     return (
       <>
@@ -86,6 +91,24 @@ export default async function TicketsPage({
             Voir le programme
           </ButtonLink>
         </div>
+
+        {isGuest && (
+          <div className="mb-8 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+            <p className="font-medium">
+              Telechargez votre billet des maintenant.
+            </p>
+            <p className="mt-1 text-warning/90">
+              Vous avez reserve sans compte : une fois cette page fermee, le
+              seul moyen de la retrouver est votre reference{" "}
+              <span className="font-mono font-semibold">{booking.reference}</span>{" "}
+              avec le telephone utilise au paiement, depuis{" "}
+              <a href="/billets/retrouver" className="underline hover:text-warning">
+                Retrouver mes billets
+              </a>
+              . Enregistrer le PDF maintenant vous evite cette etape.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-5">
           {booking.tickets.map((ticket, index) => (

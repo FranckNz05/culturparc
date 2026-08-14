@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toggleSite } from "./actions";
-import { NewAuditoriumForm, NewSiteForm } from "./site-forms";
+import { NewAuditoriumForm, NewSiteForm, SiteActions } from "./site-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +96,12 @@ export default async function SitesAdminPage() {
                 </form>
               )}
             </div>
+
+            {isAdmin && (
+              <div className="mt-3">
+                <SiteActions site={cinema} />
+              </div>
+            )}
 
             {cinema.auditoriums.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">

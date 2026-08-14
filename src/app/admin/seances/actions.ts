@@ -151,3 +151,66 @@ export async function cancelShowtime(formData: FormData): Promise<void> {
   revalidatePath("/admin/seances");
   revalidatePath("/programme");
 }
+
+export interface DeleteShowtimeState {
+  error?: string;
+  success?: string;
+}
+
+/**
+ * Supprime definitivement une seance.
+ *
+ * A la difference de l'annulation, qui garde la ligne (utile pour l'historique
+ * et les billets deja vendus), ceci retire la seance de la base. Reserve aux
+ * seances sans la moindre reservation : `bookings.showtimeId` est en
+ * `Restrict`, donc une commande existante bloquerait de toute facon la
+ * suppression au niveau de la base. Le prealable ici sert a le dire
+ * clairement plutot que de laisser remonter l'erreur PostgreSQL.
+ *
+ * Sert notamment a liberer une salle qu'on veut supprimer : une salle reste
+ * bloquee tant qu'une seule seance, meme non vendue, y est encore rattachee.
+ */
+export async function deleteShowtime(
+  _prev: DeleteShowtimeState,
+  formData: FormData,
+): Promise<DeleteShowtimeState> {
+  const session = await requireRole("MANAGER");
+  if (!session) return { error: "Acces refuse." };
+
+  const id = String(formData.get("showtimeId") ?? "");
+  if (!id) return { error: "Seance introuvable." };
+
+  const showtime = await prisma.showtime.findUnique({
+    where: { id },
+    include: {
+      movie: { select: { title: true } },
+      auditorium: { select: { cinemaId: true } },
+      _count: { select: { tickets: true } },
+    },
+  });
+  if (!showtime) return { error: "Seance introuvable." };
+
+  if (
+    session.user.role === "MANAGER" &&
+    session.user.cinemaId &&
+    showtime.auditorium.cinemaId !== session.user.cinemaId
+  ) {
+    return { error: "Cette seance appartient a un autre cinema." };
+  }
+
+  const bookingCount = await prisma.booking.count({ where: { showtimeId: id } });
+
+  if (bookingCount > 0 || showtime._count.tickets > 0) {
+    return {
+      error: `Impossible : cette seance a des reservations. Annulez-la plutot avec "Annuler".`,
+    };
+  }
+
+  await prisma.seatHold.deleteMany({ where: { showtimeId: id } });
+  await prisma.showtime.delete({ where: { id } });
+
+  revalidatePath("/admin/seances");
+  revalidatePath("/programme");
+
+  return { success: `Seance de ${showtime.movie.title} supprimee.` };
+}

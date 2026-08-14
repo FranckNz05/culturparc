@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { SeatEditor, type EditableSeat } from "./seat-editor";
+import { AuditoriumActions } from "./auditorium-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,15 @@ export default async function AuditoriumPlanPage({
           {auditorium._count.showtimes > 1 ? "s" : ""} dans cette salle.
         </p>
       </div>
+
+      <AuditoriumActions
+        auditorium={{
+          id: auditorium.id,
+          name: auditorium.name,
+          screenType: auditorium.screenType,
+          showtimeCount: auditorium._count.showtimes,
+        }}
+      />
 
       {auditorium.cinema.seatCategories.length === 0 && (
         <p className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatDayLong, formatFcfa, formatTime } from "@/lib/utils";
 import { cancelShowtime } from "./actions";
 import { ShowtimeForm } from "./showtime-form";
+import { DeleteShowtimeButton } from "./delete-showtime-button";
 
 export const dynamic = "force-dynamic";
 
@@ -179,14 +180,19 @@ export default async function ShowtimesAdminPage() {
                           {s._count.tickets} / {s.auditorium._count.seats}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {s.status !== "CANCELLED" && (
-                            <form action={cancelShowtime}>
-                              <input type="hidden" name="showtimeId" value={s.id} />
-                              <Button type="submit" variant="ghost" size="sm">
-                                Annuler
-                              </Button>
-                            </form>
-                          )}
+                          <div className="flex justify-end gap-1">
+                            {s.status !== "CANCELLED" && (
+                              <form action={cancelShowtime}>
+                                <input type="hidden" name="showtimeId" value={s.id} />
+                                <Button type="submit" variant="ghost" size="sm">
+                                  Annuler
+                                </Button>
+                              </form>
+                            )}
+                            {s._count.tickets === 0 && (
+                              <DeleteShowtimeButton showtimeId={s.id} />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -1,11 +1,17 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { createAuditorium, createSite, type SiteState } from "./actions";
+import {
+  createAuditorium,
+  createSite,
+  deleteSite,
+  updateSite,
+  type SiteState,
+} from "./actions";
 
-const inputClass =
+export const inputClass =
   "w-full rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-ink-50 " +
   "placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
@@ -18,7 +24,7 @@ function Submit({ label, pendingLabel }: { label: string; pendingLabel: string }
   );
 }
 
-function Feedback({ state }: { state: SiteState }) {
+export function Feedback({ state }: { state: SiteState }) {
   if (state.error) {
     return (
       <p
@@ -192,6 +198,179 @@ export function NewAuditoriumForm({
       <Feedback state={state} />
 
       <Submit label="Creer la salle" pendingLabel="Creation..." />
+    </form>
+  );
+}
+
+export interface EditableSite {
+  id: string;
+  name: string;
+  city: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  description: string | null;
+}
+
+/** Modification et suppression d'un site, avec un seul volet ouvert a la fois. */
+export function SiteActions({ site }: { site: EditableSite }) {
+  const [mode, setMode] = useState<"none" | "edit" | "delete">("none");
+
+  return (
+    <div className="w-full">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setMode(mode === "edit" ? "none" : "edit")}
+          className="text-xs text-ink-300 hover:text-brand-400"
+        >
+          {mode === "edit" ? "Annuler" : "Modifier"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode(mode === "delete" ? "none" : "delete")}
+          className="text-xs text-danger/80 hover:text-danger"
+        >
+          {mode === "delete" ? "Annuler" : "Supprimer"}
+        </button>
+      </div>
+
+      {mode === "edit" && <EditSiteFields site={site} onDone={() => setMode("none")} />}
+      {mode === "delete" && <DeleteSiteFields site={site} />}
+    </div>
+  );
+}
+
+export interface EditableSite {
+  id: string;
+  name: string;
+  city: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  description: string | null;
+}
+
+function EditSiteFields({
+  site,
+  onDone,
+}: {
+  site: EditableSite;
+  onDone: () => void;
+}) {
+  const [state, formAction] = useActionState<SiteState, FormData>(updateSite, {});
+
+  return (
+    <form
+      action={formAction}
+      className="mt-3 space-y-3 rounded-lg border border-ink-700 bg-ink-850 p-4"
+    >
+      <input type="hidden" name="cinemaId" value={site.id} />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1.5">
+          <span className="text-xs text-ink-100">Nom du site</span>
+          <input name="name" required defaultValue={site.name} className={inputClass} />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-xs text-ink-100">Ville</span>
+          <input name="city" required defaultValue={site.city} className={inputClass} />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-xs text-ink-100">Telephone</span>
+          <input name="phone" defaultValue={site.phone ?? ""} className={inputClass} />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-xs text-ink-100">Email</span>
+          <input
+            name="email"
+            type="email"
+            defaultValue={site.email ?? ""}
+            className={inputClass}
+          />
+        </label>
+
+        <label className="space-y-1.5 sm:col-span-2">
+          <span className="text-xs text-ink-100">Adresse</span>
+          <input name="address" defaultValue={site.address ?? ""} className={inputClass} />
+        </label>
+
+        <label className="space-y-1.5 sm:col-span-2">
+          <span className="text-xs text-ink-100">Presentation</span>
+          <textarea
+            name="description"
+            rows={2}
+            defaultValue={site.description ?? ""}
+            className={inputClass}
+          />
+        </label>
+      </div>
+
+      <Feedback state={state} />
+
+      <div className="flex gap-2">
+        <Submit label="Enregistrer" pendingLabel="Enregistrement..." />
+        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
+          Fermer
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Suppression d'un site, avec confirmation par saisie exacte du nom.
+ *
+ * La suppression est irreversible et efface salles, sieges et seances non
+ * vendues : la saisie du nom evite un clic malheureux sur une action que rien
+ * ne peut annuler. Elle echoue proprement si des reservations existent, sans
+ * rien effacer (verifie cote serveur).
+ */
+function DeleteSiteFields({ site }: { site: EditableSite }) {
+  const [state, formAction] = useActionState<SiteState, FormData>(deleteSite, {});
+  const [confirmName, setConfirmName] = useState("");
+
+  return (
+    <form
+      action={formAction}
+      className="mt-3 space-y-3 rounded-lg border border-danger/40 bg-danger/5 p-4"
+    >
+      <input type="hidden" name="cinemaId" value={site.id} />
+
+      <p className="text-sm text-danger">
+        Cette action est irreversible. Elle efface les salles, les plans de
+        sieges et les seances non vendues de {site.name}. Si des reservations
+        existent, la suppression sera refusee.
+      </p>
+
+      <label className="block space-y-1.5">
+        <span className="text-xs text-ink-100">
+          Saisissez <span className="font-mono font-semibold">{site.name}</span>{" "}
+          pour confirmer
+        </span>
+        <input
+          name="confirmName"
+          value={confirmName}
+          onChange={(e) => setConfirmName(e.target.value)}
+          className={inputClass}
+          autoComplete="off"
+        />
+      </label>
+
+      <Feedback state={state} />
+
+      <Button
+        type="submit"
+        variant="secondary"
+        size="sm"
+        disabled={confirmName !== site.name}
+        className="border-danger/60 text-danger hover:bg-danger/10"
+      >
+        Supprimer definitivement
+      </Button>
     </form>
   );
 }

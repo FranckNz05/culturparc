@@ -166,6 +166,39 @@ src/app/scan/                 Poste de controle d'acces
 scripts/                      Preparation du logo et des icones
 ```
 
+## Modifier et supprimer un site ou une salle
+
+Depuis `/admin/sites`, chaque site propose "Modifier" (nom, ville, adresse,
+telephone, email, presentation) et "Supprimer". Depuis l'editeur de plan d'une
+salle, les memes actions existent pour son nom et son type d'ecran.
+
+**Ce que change une bascule de ville.** Le programme, le catalogue et les
+contacts affiches se limitent toujours a la ville active, choisie via le
+selecteur de l'en-tete. Changer de ville sur une fiche film ne change pas
+d'adresse : la page se met a jour sur place avec les seances de la nouvelle
+ville (aucune seance si le film n'y est pas programme), exactement comme le
+reste du site.
+
+**Ce que fait vraiment "Supprimer".** Verifie empiriquement contre la base,
+pas suppose :
+
+- **Site** : la suppression echoue integralement, sans rien effacer, des
+  qu'une seule reservation existe sur une seance de ce site (`Booking.showtime`
+  est en `Restrict`) — meme une reservation en attente, meme ancienne. Sans
+  reservation, elle efface en cascade les salles, les plans de sieges, les
+  seances non vendues, les categories et les regles tarifaires propres a ce
+  site. Un site avec un historique reel ne se supprime donc pas : utilisez
+  "Fermer le site" pour le retirer du site public sans perdre cet historique.
+- **Salle** : plus strict. La base la bloque des qu'une seule seance y est
+  rattachee, vendue ou non (`Showtime.auditorium` est en `Restrict`).
+  Supprimez d'abord ses seances depuis `/admin/seances` (bouton "Supprimer",
+  disponible uniquement sans billet vendu ; sinon "Annuler" garde
+  l'historique).
+
+Les deux suppressions exigent de saisir le nom exact du site ou de la salle
+avant de s'activer : irreversibles, elles ne doivent pas partir d'un clic
+distrait.
+
 ## Comptes et mots de passe
 
 Seul un administrateur cree un compte du personnel, depuis `/admin/utilisateurs` :

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -220,4 +221,131 @@ export async function saveSeatPlan(
   return {
     success: `Plan enregistre : ${sellable.length} place${sellable.length > 1 ? "s" : ""} vendable${sellable.length > 1 ? "s" : ""}.`,
   };
+}
+
+export interface AuditoriumInfoState {
+  error?: string;
+  success?: string;
+}
+
+const infoSchema = z.object({
+  auditoriumId: z.string().min(1),
+  name: z.string().trim().min(1, "Indiquez le nom de la salle."),
+  screenType: z.enum(["STANDARD", "THREE_D", "PREMIUM", "OUTDOOR"]),
+});
+
+export async function updateAuditoriumInfo(
+  _prev: AuditoriumInfoState,
+  formData: FormData,
+): Promise<AuditoriumInfoState> {
+  const session = await requireRole("MANAGER");
+  if (!session) return { error: "Acces refuse." };
+
+  const parsed = infoSchema.safeParse({
+    auditoriumId: formData.get("auditoriumId"),
+    name: formData.get("name"),
+    screenType: formData.get("screenType"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Formulaire invalide." };
+  }
+
+  const input = parsed.data;
+
+  const auditorium = await prisma.auditorium.findUnique({
+    where: { id: input.auditoriumId },
+  });
+  if (!auditorium) return { error: "Salle introuvable." };
+
+  if (
+    session.user.role === "MANAGER" &&
+    session.user.cinemaId &&
+    auditorium.cinemaId !== session.user.cinemaId
+  ) {
+    return { error: "Cette salle appartient a un autre cinema." };
+  }
+
+  const duplicate = await prisma.auditorium.findFirst({
+    where: {
+      cinemaId: auditorium.cinemaId,
+      name: input.name,
+      id: { not: auditorium.id },
+    },
+  });
+  if (duplicate) {
+    return { error: `Une autre salle nommee ${input.name} existe deja sur ce site.` };
+  }
+
+  await prisma.auditorium.update({
+    where: { id: auditorium.id },
+    data: { name: input.name, screenType: input.screenType },
+  });
+
+  revalidatePath(`/admin/salles/${auditorium.id}`);
+  revalidatePath("/admin/sites");
+
+  return { success: "Informations de la salle mises a jour." };
+}
+
+const deleteAuditoriumSchema = z.object({
+  auditoriumId: z.string().min(1),
+  confirmName: z.string(),
+});
+
+/**
+ * Supprime une salle.
+ *
+ * La base refuse la suppression d'une salle referencee par la moindre
+ * seance, meme non vendue et meme passee : `showtimes.auditoriumId` est en
+ * `Restrict`. C'est plus strict que pour un site entier, ou seules les
+ * reservations bloquent. On verifie donc d'abord l'absence de toute seance,
+ * pour renvoyer un message exploitable plutot que l'erreur brute de
+ * PostgreSQL, et la saisie du nom confirme une action irreversible.
+ */
+export async function deleteAuditorium(
+  _prev: AuditoriumInfoState,
+  formData: FormData,
+): Promise<AuditoriumInfoState> {
+  const session = await requireRole("MANAGER");
+  if (!session) return { error: "Acces refuse." };
+
+  const parsed = deleteAuditoriumSchema.safeParse({
+    auditoriumId: formData.get("auditoriumId"),
+    confirmName: formData.get("confirmName") ?? "",
+  });
+  if (!parsed.success) return { error: "Formulaire invalide." };
+
+  const auditorium = await prisma.auditorium.findUnique({
+    where: { id: parsed.data.auditoriumId },
+    include: { _count: { select: { seats: true, showtimes: true } } },
+  });
+  if (!auditorium) return { error: "Salle introuvable." };
+
+  if (
+    session.user.role === "MANAGER" &&
+    session.user.cinemaId &&
+    auditorium.cinemaId !== session.user.cinemaId
+  ) {
+    return { error: "Cette salle appartient a un autre cinema." };
+  }
+
+  if (parsed.data.confirmName.trim() !== auditorium.name) {
+    return {
+      error: `Saisissez exactement "${auditorium.name}" pour confirmer la suppression.`,
+    };
+  }
+
+  if (auditorium._count.showtimes > 0) {
+    return {
+      error:
+        `Impossible : ${auditorium._count.showtimes} seance${auditorium._count.showtimes > 1 ? "s" : ""} ` +
+        `${auditorium._count.showtimes > 1 ? "sont rattachees" : "est rattachee"} a cette salle, ` +
+        `vendues ou non. Supprimez-les depuis l'onglet Seances avant de retirer la salle.`,
+    };
+  }
+
+  await prisma.auditorium.delete({ where: { id: auditorium.id } });
+
+  redirect(`/admin/sites`);
 }
